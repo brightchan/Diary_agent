@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+data/*.sqlite3-wal
+data/*.sqlite3-shm
+data/backups/*.tmp
+

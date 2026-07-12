@@ -1,0 +1,7 @@
+interface:
+  display_name: "生活日记管家"
+  short_description: "清洗语音转写、分类生活主题、关联经历并保存日记和周记"
+  default_prompt: "Use $record-life-journal to organize, review, and save this diary entry."
+
+policy:
+  allow_implicit_invocation: true
