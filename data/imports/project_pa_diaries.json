@@ -1,0 +1,1298 @@
+{
+  "version": 1,
+  "source_database": "/mnt/d/Project_PA/data/project_pa.db",
+  "source_sha256": "7c226f880ef83c67e566f341da49ad8e0bb808156a8fa266716c372ae569aa91",
+  "source_filter": "lower(category)='diary' AND user_id=2 AND user_confirmed=1 AND content nonempty",
+  "record_count": 40,
+  "backup": {
+    "database": "/mnt/d/diary_agent/data/backups/diary-20260713-145345.sqlite3",
+    "sha256": "f6bd58663ec008febdec28e529e5b931f0ae172e170ca4f53fb81bc53ba9c893",
+    "manifest": "/mnt/d/diary_agent/data/backups/diary-20260713-145345.sha256"
+  },
+  "preview_report": "/mnt/d/diary_agent/data/imports/project_pa_diaries_preview.md",
+  "preview_report_sha256": "543b6445a71211d5a6c613af80e29807851e174744df2195b46a2916e419ffe2",
+  "confirmation_status": "confirmed",
+  "records": [
+    {
+      "source_id": 16,
+      "source_uuid": "2a8853ab-a862-4baa-b8fa-0e6746f5af96",
+      "source_created_at": "2026-04-04T15:07:51+08:00",
+      "source_updated_at": "2026-04-04 15:07:51",
+      "source_topic": "身体",
+      "source_key": "project_pa:entries:16@2026-04-04T15:07:51+08:00",
+      "raw_sha256": "047d046f0ee145e5b64ddb7e289f6e33380201b6112cab7e1f5cf68db6a71db1",
+      "entry_date": "2026-04-04",
+      "target_entry_id": "ae022668-ee90-4251-b065-054c6fd5463a",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "前天开始生病了，发烧38度，昨天稍微好点，今天几乎完全好了，就还有点困和头痛",
+          "theme": "健康恢复"
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-04--ae022668-ee90-4251-b065-054c6fd5463a.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-04--ae022668-ee90-4251-b065-054c6fd5463a.md"
+    },
+    {
+      "source_id": 17,
+      "source_uuid": "cc6c79db-43ec-4cd3-933f-a0b865b068d1",
+      "source_created_at": "2026-04-04T15:08:38+08:00",
+      "source_updated_at": "2026-04-04 15:08:38",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:17@2026-04-04T15:08:38+08:00",
+      "raw_sha256": "b1bf76ca2419e60b5b13ca1528aec5e9773c49b7df553712c047f39f09b99fdc",
+      "entry_date": "2026-04-04",
+      "target_entry_id": "3cae6272-ddf0-4214-a6f6-16828c73b9ed",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚我做了5个俯卧撑",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-04--3cae6272-ddf0-4214-a6f6-16828c73b9ed.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-04--3cae6272-ddf0-4214-a6f6-16828c73b9ed.md"
+    },
+    {
+      "source_id": 18,
+      "source_uuid": "2cc00a3d-2dc5-40e7-ad5f-189c4d297d91",
+      "source_created_at": "2026-04-04T15:09:29+08:00",
+      "source_updated_at": "2026-04-04 15:09:29",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:18@2026-04-04T15:09:29+08:00",
+      "raw_sha256": "97d16632ef970e3fa472d77ac129d9f5d75ea4fc01ce8a6dc5d5767e8cfea04b",
+      "entry_date": "2026-04-04",
+      "target_entry_id": "9d075bd4-b74c-43b9-b70a-586bb11a6d8a",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚我做了10个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "3cae6272-ddf0-4214-a6f6-16828c73b9ed",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-04--9d075bd4-b74c-43b9-b70a-586bb11a6d8a.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-04--9d075bd4-b74c-43b9-b70a-586bb11a6d8a.md"
+    },
+    {
+      "source_id": 19,
+      "source_uuid": "e7f7916a-8a8f-4759-9b33-20becdc93d71",
+      "source_created_at": "2026-04-04T15:29:18+08:00",
+      "source_updated_at": "2026-04-04 15:29:18",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:19@2026-04-04T15:29:18+08:00",
+      "raw_sha256": "cb0ae3fbf11039f56342732d5713aca069da7f342cb9bebd1ccb99c5d2c729dc",
+      "entry_date": "2026-04-04",
+      "target_entry_id": "2d983568-3d45-4b2a-9cf2-71b27193c8ba",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚我骑车5公里回来",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "9d075bd4-b74c-43b9-b70a-586bb11a6d8a",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-04--2d983568-3d45-4b2a-9cf2-71b27193c8ba.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-04--2d983568-3d45-4b2a-9cf2-71b27193c8ba.md"
+    },
+    {
+      "source_id": 20,
+      "source_uuid": "fba8dd12-c38d-4262-9aba-d225f80fa1d9",
+      "source_created_at": "2026-04-04T15:31:08+08:00",
+      "source_updated_at": "2026-04-04 15:31:08",
+      "source_topic": "孩子",
+      "source_key": "project_pa:entries:20@2026-04-04T15:31:08+08:00",
+      "raw_sha256": "c390d5b79404bb28c0573e98050828014dd497eb22fa4a8e795b6861ba81a8c2",
+      "entry_date": "2026-04-04",
+      "target_entry_id": "a13124f4-04ae-4e5f-8269-7b4980ba7e56",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "今天跟孩子玩电路板，他居然知道验电器的工作原理。不知道是不是我之前告诉过他。但他能记得也确实代表他有兴趣",
+          "theme": "孩子教育"
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-04--a13124f4-04ae-4e5f-8269-7b4980ba7e56.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-04--a13124f4-04ae-4e5f-8269-7b4980ba7e56.md"
+    },
+    {
+      "source_id": 21,
+      "source_uuid": "3330fddb-4d1f-45c0-85c3-621ae7f4e209",
+      "source_created_at": "2026-04-04T16:00:25+08:00",
+      "source_updated_at": "2026-04-04 16:00:25",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:21@2026-04-04T16:00:25+08:00",
+      "raw_sha256": "8706a5bd615a2ffddc22f86fca4e35eb6a61de3030ad38599c9ce43a6782e441",
+      "entry_date": "2026-04-04",
+      "target_entry_id": "2c56c6f8-7272-4e60-8598-6cbd1d4a8d98",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚我跑了5公里，花了1个小时30分钟",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "2d983568-3d45-4b2a-9cf2-71b27193c8ba",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-04--2c56c6f8-7272-4e60-8598-6cbd1d4a8d98.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-04--2c56c6f8-7272-4e60-8598-6cbd1d4a8d98.md"
+    },
+    {
+      "source_id": 22,
+      "source_uuid": "66adf7f0-021b-47db-8ae0-08792b5937fc",
+      "source_created_at": "2026-04-04T16:00:54+08:00",
+      "source_updated_at": "2026-04-04 16:00:54",
+      "source_topic": null,
+      "source_key": "project_pa:entries:22@2026-04-04T16:00:54+08:00",
+      "raw_sha256": "af866fe9214e35f0d7a8f637dbd7089e8f3fdefda3b6223c843b5c36489409ac",
+      "entry_date": "2026-04-04",
+      "target_entry_id": "b026b430-42d4-4231-958a-9b393779284e",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚我做了20个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "2c56c6f8-7272-4e60-8598-6cbd1d4a8d98",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-04--b026b430-42d4-4231-958a-9b393779284e.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-04--b026b430-42d4-4231-958a-9b393779284e.md"
+    },
+    {
+      "source_id": 23,
+      "source_uuid": "0e92da97-9c26-492b-9f1d-b03b4db734fc",
+      "source_created_at": "2026-04-04T23:18:41+08:00",
+      "source_updated_at": "2026-04-04 23:18:41",
+      "source_topic": "孩子",
+      "source_key": "project_pa:entries:23@2026-04-04T23:18:41+08:00",
+      "raw_sha256": "d1109380cc43f241e27bddd0069528777b94f0e17cf5582b2f58ab0ca84d2e8c",
+      "entry_date": "2026-04-04",
+      "target_entry_id": "a8511698-9308-4e55-b514-8a6b925f1462",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "今天跟娃练琴，让他把练琴和电路板联系到一起了。虽然还是很挣扎，但最后还是让他练习完成才睡觉",
+          "theme": "孩子教育"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "a13124f4-04ae-4e5f-8269-7b4980ba7e56",
+          "relation": "continuation",
+          "reason": "继续记录与孩子共同学习及引导过程",
+          "score": 0.84
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-04--a8511698-9308-4e55-b514-8a6b925f1462.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-04--a8511698-9308-4e55-b514-8a6b925f1462.md"
+    },
+    {
+      "source_id": 29,
+      "source_uuid": "875be30d-429a-47b9-8c19-87756ec1ede1",
+      "source_created_at": "2026-04-13T12:09:51.897789+08:00",
+      "source_updated_at": "2026-04-13 18:08:49.134845",
+      "source_topic": "其他",
+      "source_key": "project_pa:entries:29@2026-04-13T12:09:51.897789+08:00",
+      "raw_sha256": "64696d4b6eba87493aa44b21124dc04403812fff3d6b4354db04faac052df984",
+      "entry_date": "2026-04-13",
+      "target_entry_id": "707c0118-f6d5-4e52-a89d-e21726e53e33",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "今天去美国大使馆面试啊，因为Kyle忽然说要五月中旬搞global on site。今天还是很晒。在外面等了好久，手机也不准开，进到里面，还被收了护照去不知道查询什么，让我坐在小凳子上面等了快20分钟，才去面试。我们好多人是这样被收了护照的，凳子都坐满了。然后因为基本上是早上最后一批，后面都基本没别的人了。去到面试官那之前，我前面有两个选择，一个是之前面试过我的老外男，另一个是华人女的，我就犹豫了一下去华人女那。准备了一堆资料，根本不看啊，上来第一个问题就是说，你做什么工作的？我就说是疾病相关的研究。我就解释一下，我老婆是新加坡人，我们去旅游，十周年，小孩也上小学了。其实感觉他也不关心。没问几个问题，就直接给我黄纸。哇，补的材料比之前还要多。然后，早上去进大使馆的路上有两个门啊，死活推不开啊，很沉。然后，我也看错了方向，所以可能冥冥之中也就意味着些什么吧。反正这个材料我也会补了，到时候看看这个旅游签能搞下10年不。搞不下来，就算球，也不去了。真是受气，感觉自己白花时间找罪受。看了一下上次，check之后也是要一个多月，而且还要去送护照，一周之后才能取。照这么算我应该是去不了美国了。",
+          "theme": "美国签证"
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-13--707c0118-f6d5-4e52-a89d-e21726e53e33.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-13--707c0118-f6d5-4e52-a89d-e21726e53e33.md"
+    },
+    {
+      "source_id": 31,
+      "source_uuid": "30ae1079-2211-4e5a-9bf0-e1d519fec6b5",
+      "source_created_at": "2026-04-15T17:42:19.923606+08:00",
+      "source_updated_at": "2026-04-15 17:42:19.923656",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:31@2026-04-15T17:42:19.923606+08:00",
+      "raw_sha256": "eab8f9bb1b1058fee1b7d962c7910f49470158678499302172473350eaa5b522",
+      "entry_date": "2026-04-15",
+      "target_entry_id": "cec8cd58-39fd-47a3-9312-1cb7edd45a22",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了5个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "b026b430-42d4-4231-958a-9b393779284e",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-15--cec8cd58-39fd-47a3-9312-1cb7edd45a22.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-15--cec8cd58-39fd-47a3-9312-1cb7edd45a22.md"
+    },
+    {
+      "source_id": 40,
+      "source_uuid": "8ce93887-335b-458e-baca-6c82aa7f668d",
+      "source_created_at": "2026-04-17T15:28:31.350117+08:00",
+      "source_updated_at": "2026-04-17 15:28:31.350147",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:40@2026-04-17T15:28:31.350117+08:00",
+      "raw_sha256": "f99a1981fa09b04137990db75afbcc38c56cdd70588aea7be2976f693d672197",
+      "entry_date": "2026-04-17",
+      "target_entry_id": "f99936fc-536e-4be7-8a88-78cd202e64cc",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 5个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "cec8cd58-39fd-47a3-9312-1cb7edd45a22",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-17--f99936fc-536e-4be7-8a88-78cd202e64cc.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-17--f99936fc-536e-4be7-8a88-78cd202e64cc.md"
+    },
+    {
+      "source_id": 44,
+      "source_uuid": "5b92fc15-8538-4a8f-9c0b-945ff99f07d5",
+      "source_created_at": "2026-04-21T19:11:29.195753+08:00",
+      "source_updated_at": "2026-04-21 19:11:29.195760",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:44@2026-04-21T19:11:29.195753+08:00",
+      "raw_sha256": "f99a1981fa09b04137990db75afbcc38c56cdd70588aea7be2976f693d672197",
+      "entry_date": "2026-04-21",
+      "target_entry_id": "865bdd6a-3539-4405-ace7-51f6de3921d1",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 5个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "f99936fc-536e-4be7-8a88-78cd202e64cc",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-21--865bdd6a-3539-4405-ace7-51f6de3921d1.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-21--865bdd6a-3539-4405-ace7-51f6de3921d1.md"
+    },
+    {
+      "source_id": 45,
+      "source_uuid": "f7e452fd-d26b-4a03-95c0-e241aa28d260",
+      "source_created_at": "2026-04-21T19:11:36.862175+08:00",
+      "source_updated_at": "2026-04-21 19:11:36.862182",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:45@2026-04-21T19:11:36.862175+08:00",
+      "raw_sha256": "f99a1981fa09b04137990db75afbcc38c56cdd70588aea7be2976f693d672197",
+      "entry_date": "2026-04-21",
+      "target_entry_id": "e04e42b2-8a74-4622-9019-e2f332da14d5",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 5个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "865bdd6a-3539-4405-ace7-51f6de3921d1",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-21--e04e42b2-8a74-4622-9019-e2f332da14d5.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-21--e04e42b2-8a74-4622-9019-e2f332da14d5.md"
+    },
+    {
+      "source_id": 47,
+      "source_uuid": "aa432793-df5f-4bb7-85b9-a4eeb5f32fae",
+      "source_created_at": "2026-04-22T16:12:18.313984+08:00",
+      "source_updated_at": "2026-04-22 16:12:18.314053",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:47@2026-04-22T16:12:18.313984+08:00",
+      "raw_sha256": "f99a1981fa09b04137990db75afbcc38c56cdd70588aea7be2976f693d672197",
+      "entry_date": "2026-04-22",
+      "target_entry_id": "6147c1e8-fa88-4a44-8e1f-1c0a1f29e00c",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 5个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "e04e42b2-8a74-4622-9019-e2f332da14d5",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-22--6147c1e8-fa88-4a44-8e1f-1c0a1f29e00c.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-22--6147c1e8-fa88-4a44-8e1f-1c0a1f29e00c.md"
+    },
+    {
+      "source_id": 49,
+      "source_uuid": "b5ab37ee-2314-40e3-b6fa-f78f3cdfdd3c",
+      "source_created_at": "2026-04-24T10:26:52.206650+08:00",
+      "source_updated_at": "2026-04-24 10:26:52.206680",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:49@2026-04-24T10:26:52.206650+08:00",
+      "raw_sha256": "f99a1981fa09b04137990db75afbcc38c56cdd70588aea7be2976f693d672197",
+      "entry_date": "2026-04-24",
+      "target_entry_id": "e1189889-c392-45e1-aa3c-32c5b50dc9fa",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 5个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "6147c1e8-fa88-4a44-8e1f-1c0a1f29e00c",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-24--e1189889-c392-45e1-aa3c-32c5b50dc9fa.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-24--e1189889-c392-45e1-aa3c-32c5b50dc9fa.md"
+    },
+    {
+      "source_id": 50,
+      "source_uuid": "dd2a0df6-4f09-4ea6-9a09-d04c92cdcd1c",
+      "source_created_at": "2026-04-24T11:52:07.107517+08:00",
+      "source_updated_at": "2026-04-24 11:52:07.107548",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:50@2026-04-24T11:52:07.107517+08:00",
+      "raw_sha256": "f99a1981fa09b04137990db75afbcc38c56cdd70588aea7be2976f693d672197",
+      "entry_date": "2026-04-24",
+      "target_entry_id": "3fd795a8-4971-4f89-850c-208f6beb7fad",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 5个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "e1189889-c392-45e1-aa3c-32c5b50dc9fa",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-24--3fd795a8-4971-4f89-850c-208f6beb7fad.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-24--3fd795a8-4971-4f89-850c-208f6beb7fad.md"
+    },
+    {
+      "source_id": 52,
+      "source_uuid": "9cb7b8df-44be-4c1d-97f0-f0a272fcead7",
+      "source_created_at": "2026-04-26T15:59:23.364651+08:00",
+      "source_updated_at": "2026-04-26 15:59:23.364658",
+      "source_topic": "回国",
+      "source_key": "project_pa:entries:52@2026-04-26T15:59:23.364651+08:00",
+      "raw_sha256": "4b6ae8e12bc359dc6483adc28b442ff01e0fad05a0e17bb3db7a0f9cbb6cf7b3",
+      "entry_date": "2026-04-26",
+      "target_entry_id": "96bb56ec-cbe4-4fbe-aa80-4a515dce8ed5",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "今天请了邱旻吃饭 聊聊国内的环境 他说了很多我之前没想过的 比如说相比之前 找工作越来越难了 职业空档期越来越长 他一年也都只有三个面试 而且 HR 也会问人有没有房贷 有没有结婚生娃之类的问题 就知道怎么拿捏你 而且杭州因为阿里 卷的文化特别严重 艾名这样不加班不怎么卷的公司都是挺好的了",
+          "theme": "回国与职业环境"
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-26--96bb56ec-cbe4-4fbe-aa80-4a515dce8ed5.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-26--96bb56ec-cbe4-4fbe-aa80-4a515dce8ed5.md"
+    },
+    {
+      "source_id": 55,
+      "source_uuid": "093c135e-77f3-498c-bdb5-fe0d5f3d83bd",
+      "source_created_at": "2026-04-28T11:38:46.472121+08:00",
+      "source_updated_at": "2026-04-28 11:38:46.472128",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:55@2026-04-28T11:38:46.472121+08:00",
+      "raw_sha256": "569790525653a5dec406195c77b33903b0bf5dcc695dfdb9b8cbf084cf625daf",
+      "entry_date": "2026-04-28",
+      "target_entry_id": "624e1629-6670-402b-9ddc-a9e2e7975503",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 10 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "3fd795a8-4971-4f89-850c-208f6beb7fad",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-28--624e1629-6670-402b-9ddc-a9e2e7975503.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-28--624e1629-6670-402b-9ddc-a9e2e7975503.md"
+    },
+    {
+      "source_id": 56,
+      "source_uuid": "1f499d4a-99cf-4796-b347-f5f148f3e27d",
+      "source_created_at": "2026-04-28T17:15:34.648848+08:00",
+      "source_updated_at": "2026-04-28 17:15:34.648876",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:56@2026-04-28T17:15:34.648848+08:00",
+      "raw_sha256": "569790525653a5dec406195c77b33903b0bf5dcc695dfdb9b8cbf084cf625daf",
+      "entry_date": "2026-04-28",
+      "target_entry_id": "4f5d3b08-73e9-42d3-a015-befd88778540",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 10 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "624e1629-6670-402b-9ddc-a9e2e7975503",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-28--4f5d3b08-73e9-42d3-a015-befd88778540.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-28--4f5d3b08-73e9-42d3-a015-befd88778540.md"
+    },
+    {
+      "source_id": 57,
+      "source_uuid": "040be599-756d-4594-b1de-29c43edb08d0",
+      "source_created_at": "2026-04-29T17:26:32.661190+08:00",
+      "source_updated_at": "2026-04-29 17:26:32.661197",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:57@2026-04-29T17:26:32.661190+08:00",
+      "raw_sha256": "569790525653a5dec406195c77b33903b0bf5dcc695dfdb9b8cbf084cf625daf",
+      "entry_date": "2026-04-29",
+      "target_entry_id": "d0cd9b8e-d9e5-4fe4-8f4c-d95cbbdef0e0",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 10 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "4f5d3b08-73e9-42d3-a015-befd88778540",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-29--d0cd9b8e-d9e5-4fe4-8f4c-d95cbbdef0e0.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-29--d0cd9b8e-d9e5-4fe4-8f4c-d95cbbdef0e0.md"
+    },
+    {
+      "source_id": 58,
+      "source_uuid": "c20bebc2-59aa-4e0c-9e3f-b9f5828c3a70",
+      "source_created_at": "2026-04-29T17:36:22.983753+08:00",
+      "source_updated_at": "2026-04-29 17:36:22.983760",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:58@2026-04-29T17:36:22.983753+08:00",
+      "raw_sha256": "c6a76000d7ec50eadb28a443fb7eb04651eee008af8a885eee810148debbef70",
+      "entry_date": "2026-04-29",
+      "target_entry_id": "883d46d3-0150-4aab-b3a7-33af3581a663",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "做了 20 个深蹲",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "d0cd9b8e-d9e5-4fe4-8f4c-d95cbbdef0e0",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/04/2026-04-29--883d46d3-0150-4aab-b3a7-33af3581a663.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/04/2026-04-29--883d46d3-0150-4aab-b3a7-33af3581a663.md"
+    },
+    {
+      "source_id": 59,
+      "source_uuid": "8889470d-b52d-48f6-97aa-f506eb3802b1",
+      "source_created_at": "2026-05-03T15:45:05.121784+08:00",
+      "source_updated_at": "2026-05-03 15:45:05.121836",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:59@2026-05-03T15:45:05.121784+08:00",
+      "raw_sha256": "c6a76000d7ec50eadb28a443fb7eb04651eee008af8a885eee810148debbef70",
+      "entry_date": "2026-05-03",
+      "target_entry_id": "149ae111-1cb9-400b-bc02-51a2dd0764bd",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "做了 20 个深蹲",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "883d46d3-0150-4aab-b3a7-33af3581a663",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-03--149ae111-1cb9-400b-bc02-51a2dd0764bd.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-03--149ae111-1cb9-400b-bc02-51a2dd0764bd.md"
+    },
+    {
+      "source_id": 60,
+      "source_uuid": "7132b681-382c-44a9-a708-ca586a42804d",
+      "source_created_at": "2026-05-03T15:45:52.646134+08:00",
+      "source_updated_at": "2026-05-03 15:45:52.646142",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:60@2026-05-03T15:45:52.646134+08:00",
+      "raw_sha256": "fc0f95db026fb5c319cf582585947fceefe7932b37755f87ba869290a1e11df6",
+      "entry_date": "2026-05-03",
+      "target_entry_id": "d24b221a-168a-49a5-a823-0576289bd761",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "做了 20 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "149ae111-1cb9-400b-bc02-51a2dd0764bd",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-03--d24b221a-168a-49a5-a823-0576289bd761.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-03--d24b221a-168a-49a5-a823-0576289bd761.md"
+    },
+    {
+      "source_id": 61,
+      "source_uuid": "86b3045d-b79d-46b8-adea-4607907c02a9",
+      "source_created_at": "2026-05-05T18:25:34.259050+08:00",
+      "source_updated_at": "2026-05-05 18:25:34.259058",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:61@2026-05-05T18:25:34.259050+08:00",
+      "raw_sha256": "569790525653a5dec406195c77b33903b0bf5dcc695dfdb9b8cbf084cf625daf",
+      "entry_date": "2026-05-05",
+      "target_entry_id": "a598d4f0-80a5-4422-8905-2c54f4d85564",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 10 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "d24b221a-168a-49a5-a823-0576289bd761",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-05--a598d4f0-80a5-4422-8905-2c54f4d85564.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-05--a598d4f0-80a5-4422-8905-2c54f4d85564.md"
+    },
+    {
+      "source_id": 62,
+      "source_uuid": "0a96d2ca-3db2-408c-ba00-887f2e997434",
+      "source_created_at": "2026-05-05T22:58:04.638320+08:00",
+      "source_updated_at": "2026-05-05 22:58:04.638334",
+      "source_topic": "饭局",
+      "source_key": "project_pa:entries:62@2026-05-05T22:58:04.638320+08:00",
+      "raw_sha256": "809cddc0208b20357846ddb28a2e0121c72e91436948ebc3d6c9dc425c5dc447",
+      "entry_date": "2026-05-05",
+      "target_entry_id": "f726e489-374d-41a4-962f-e0640160d2e7",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "今天又跟沈阳师兄和孙妙师姐吃饭，他们请我们在三盅两件吃。感觉就是为了还我们之前的那顿饭。这次更明确了师兄是工作压力大就会有高血压，肠胃也不太好所以不会那么喜欢辛辣的食物，而且因为怕高血糖也不太喜欢奶茶之类的东西。师姐还好一些，也不怎么吃辣，可能不怎么喝奶茶，至少最近在考虑增肌，周末有去健身。",
+          "theme": "饭局与健康观察"
+        },
+        {
+          "position": 1,
+          "text": "我们聊了很多AI的使用，发现共同点都是上面的领导都很想用好AI但是自己没有时间，就很希望下面的人用。但是下面的人还不一定能很积极用。越是年轻的心态越开放。但是还是很多人没法用好。而且组织架构也没有准备好，似乎只有大型的科技公司有那个基础建设和人才去大范围使用AI。而且也会有很多行政上的阻挠，比如ASTAR就禁止这些那些。我们公司当年也很晚才开始启用。所以我也修正了自己的预测，可能因为各种机构的惯性，AI改变社会的速度会慢一些。",
+          "theme": "AI与组织变革"
+        },
+        {
+          "position": 2,
+          "text": "我吐槽了我们公司关于使用AI的KPI。沈阳说他准备搞Hackathon，要求大家在限定时间用AI做作品，然后大家投票，排名末尾的话就可能被淘汰，以此逼迫大家用AI。师姐也说她需要不停推下面的人用AI。逸超就因为比较希望自己曾经写的东西能有用武之地，开始的时候有点不愿意用。但是我们其实都觉得应该舍弃过去的东西，直接写新的代码，拥抱新技术。这点来看师姐也是很能断舍离的人。",
+          "theme": "AI与组织变革"
+        },
+        {
+          "position": 3,
+          "text": "师兄还说到其实国内使用AI的水平很低，有些人甚至用豆包写code。所以我们如果能用好国外的这种强大模型其实是有莫大优势的。",
+          "theme": "AI与组织变革"
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-05--f726e489-374d-41a4-962f-e0640160d2e7.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-05--f726e489-374d-41a4-962f-e0640160d2e7.md"
+    },
+    {
+      "source_id": 63,
+      "source_uuid": "6b0092cd-70a2-408f-a1f6-21034be088a3",
+      "source_created_at": "2026-05-06T18:29:15.927798+08:00",
+      "source_updated_at": "2026-05-06 18:29:15.927907",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:63@2026-05-06T18:29:15.927798+08:00",
+      "raw_sha256": "ef271015ddd34e8dd797a9dbd71691312407e9d25632f976129f6b63122e4919",
+      "entry_date": "2026-05-06",
+      "target_entry_id": "ec8b3d2d-0be6-4657-9c2b-9e24c5a67dac",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "做了 15 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "a598d4f0-80a5-4422-8905-2c54f4d85564",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-06--ec8b3d2d-0be6-4657-9c2b-9e24c5a67dac.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-06--ec8b3d2d-0be6-4657-9c2b-9e24c5a67dac.md"
+    },
+    {
+      "source_id": 64,
+      "source_uuid": "5e838d60-5d6c-4d24-b116-3168385fc657",
+      "source_created_at": "2026-05-06T18:30:53.430877+08:00",
+      "source_updated_at": "2026-05-06 18:30:53.430884",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:64@2026-05-06T18:30:53.430877+08:00",
+      "raw_sha256": "55b076f038cf84173384882c061b0d29cecdf66484e34e48c8db9dad27b43dc6",
+      "entry_date": "2026-05-06",
+      "target_entry_id": "4f07a81b-1bd2-4a39-910b-3c0a10dc2974",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "做了 25 个深蹲",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "ec8b3d2d-0be6-4657-9c2b-9e24c5a67dac",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-06--4f07a81b-1bd2-4a39-910b-3c0a10dc2974.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-06--4f07a81b-1bd2-4a39-910b-3c0a10dc2974.md"
+    },
+    {
+      "source_id": 66,
+      "source_uuid": "8040048a-8d9a-4f60-b496-479ad4f202e5",
+      "source_created_at": "2026-05-08T09:25:36.565351+08:00",
+      "source_updated_at": "2026-05-08 09:25:36.565359",
+      "source_topic": "SG bio",
+      "source_key": "project_pa:entries:66@2026-05-08T09:25:36.565351+08:00",
+      "raw_sha256": "b2e5dc5b8c70ebb014217a4bfbeed71abeab0f2ee617618fb6dbcb6ffb0d0976",
+      "entry_date": "2026-05-08",
+      "target_entry_id": "3c06693c-8ebb-4cec-84d7-444c87ffbb71",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "国良说他跟 Edison Liu 聊了 他要回来新加坡做个性化医疗相关的研究 推进肿瘤个性化治疗 建个新的所 做包括 perturb seq 之类的东西 也有可能拿到 sg100k 数据去做 这个可能是这位老家伙最后一个大项目了",
+          "theme": "新加坡生物医学研究"
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-08--3c06693c-8ebb-4cec-84d7-444c87ffbb71.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-08--3c06693c-8ebb-4cec-84d7-444c87ffbb71.md"
+    },
+    {
+      "source_id": 68,
+      "source_uuid": "70321d5e-97c2-4bae-b789-070860b3f21a",
+      "source_created_at": "2026-05-11T16:20:19.453880+08:00",
+      "source_updated_at": "2026-05-11 16:20:19.453887",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:68@2026-05-11T16:20:19.453880+08:00",
+      "raw_sha256": "569790525653a5dec406195c77b33903b0bf5dcc695dfdb9b8cbf084cf625daf",
+      "entry_date": "2026-05-11",
+      "target_entry_id": "7e6d3755-c8fd-4d0d-beb7-5c7229830883",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 10 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "4f07a81b-1bd2-4a39-910b-3c0a10dc2974",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-11--7e6d3755-c8fd-4d0d-beb7-5c7229830883.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-11--7e6d3755-c8fd-4d0d-beb7-5c7229830883.md"
+    },
+    {
+      "source_id": 69,
+      "source_uuid": "2fe00f68-84d6-4114-8153-f8ac3692dc6d",
+      "source_created_at": "2026-05-13T14:10:03.870844+08:00",
+      "source_updated_at": "2026-05-13 14:10:03.870852",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:69@2026-05-13T14:10:03.870844+08:00",
+      "raw_sha256": "0bb697323e3b0702d177ed5ce7a8f12866fd1b1e3d4d081a0c6ceb832c7b8ce4",
+      "entry_date": "2026-05-13",
+      "target_entry_id": "2107f2fd-5e4e-45bd-96b9-70f3d00920c1",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "昨天做了 30 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "7e6d3755-c8fd-4d0d-beb7-5c7229830883",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-13--2107f2fd-5e4e-45bd-96b9-70f3d00920c1.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-13--2107f2fd-5e4e-45bd-96b9-70f3d00920c1.md"
+    },
+    {
+      "source_id": 70,
+      "source_uuid": "3a87e3c8-cb5e-48cc-89cf-695d0a9478fb",
+      "source_created_at": "2026-05-13T17:40:29.863852+08:00",
+      "source_updated_at": "2026-05-13 17:40:29.863880",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:70@2026-05-13T17:40:29.863852+08:00",
+      "raw_sha256": "26d06020a4529bf32672bb201e7226d26f57421c180b503a537f3ec19d6d104a",
+      "entry_date": "2026-05-13",
+      "target_entry_id": "faf9e1ff-aaa3-48bd-a1cb-d6fe4373e6db",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 30 个深蹲",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "2107f2fd-5e4e-45bd-96b9-70f3d00920c1",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-13--faf9e1ff-aaa3-48bd-a1cb-d6fe4373e6db.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-13--faf9e1ff-aaa3-48bd-a1cb-d6fe4373e6db.md"
+    },
+    {
+      "source_id": 71,
+      "source_uuid": "dffcfaa4-6ef6-459d-84e3-177ecd33cead",
+      "source_created_at": "2026-05-13T17:40:40.657945+08:00",
+      "source_updated_at": "2026-05-13 17:40:40.657953",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:71@2026-05-13T17:40:40.657945+08:00",
+      "raw_sha256": "fc0f95db026fb5c319cf582585947fceefe7932b37755f87ba869290a1e11df6",
+      "entry_date": "2026-05-13",
+      "target_entry_id": "35cde9ef-886f-458f-8647-ec9fad34e5c0",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "做了 20 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "faf9e1ff-aaa3-48bd-a1cb-d6fe4373e6db",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-13--35cde9ef-886f-458f-8647-ec9fad34e5c0.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-13--35cde9ef-886f-458f-8647-ec9fad34e5c0.md"
+    },
+    {
+      "source_id": 72,
+      "source_uuid": "64689ee5-bccf-4c7e-bc12-c23b98536978",
+      "source_created_at": "2026-05-14T10:52:10.922252+08:00",
+      "source_updated_at": "2026-05-14 10:52:10.922258",
+      "source_topic": "饭局",
+      "source_key": "project_pa:entries:72@2026-05-14T10:52:10.922252+08:00",
+      "raw_sha256": "f543628288d6286fc3b3a3fa77276d5ac04e16038ec376ed61afed425a192957",
+      "entry_date": "2026-05-14",
+      "target_entry_id": "125fabf4-4210-4cb9-97c4-1f638a99f932",
+      "status": "confirmed",
+      "clean_unchanged": false,
+      "segments": [
+        {
+          "position": 0,
+          "text": "前天跟张莹吃饭 聊了好多东西。第一个是 Wai Leong 现在风生水起了。他 50 50 在 Duke 和 NCC. 有两个 PA。时间很难约了。GIS 在 Wan 老板牵头下正在做 Pan cancer organoid. Wai Leong 负责出样本。还说到他希望找国内的大牛合作发大文章，只要能挂一个倒数第三的通讯就好 能出钱就出钱，不行就出力。还有过年清华的 8 年临床医生找他实习两年，现在在帮张莹干活。然后 Wai Leong 因为眼红人家有公司，也想搞些 ADC 什么的，在肿瘤里找靶点想做 pan cancer ADC，毕竟他现在有临床资源了。",
+          "theme": "科研合作与资源"
+        },
+        {
+          "position": 1,
+          "text": "第二是她和 Pierce 因为这个 Gut 的文章还闹了不少矛盾。在这个快投之前她就每个月去找 Pierce 汇报进度了。结果最后要发的时候，Pierce 就拦着不给他发，又说我看不懂你的文章写什么，又说这不行，那不行。然后搞半天，原来就是想要加一个人，因为他可能不太满意，Wai Leong 要做last last, 所以最后就让他们RO补了一个panel，然后又放成了共一作者。Wai Leong 也很懂他，让张莹讲的时候每次要提到 Pierce 他们的贡献。还说要把 Neslihan 名字去掉 又不愿意有那么多巍巍的人在里面，所以要让张莹写清楚每个中国人在文章里的贡献不然就不加了。",
+          "theme": "科研合作与署名"
+        },
+        {
+          "position": 2,
+          "text": "第三个是国内的海优其实资助力度没有那么大。上交浙大之类的因为不是市里或者省里的学校，其实就只能拿到国家的那几十万加上一百万启动经费。而这些名校其实名额已经占了大头，比如浙大一年就有上百。其他学校加起来都没多少。佳旭去年就优青回去浙大妇产科医院了。还有 Huck 曾经的博后梁洪青，Ashok 的学生，也在那边，做生殖细胞相关的分化研究。今年还发了一篇 science。但是浙大只会给到年薪 50 万，而且好的小学其实也很难进去，人才的绿色通道不顶用的。 我问她会不会还有什么坑，她说就算有也没办法。这些待遇都是口头通知的，到时不给也就不给了。还是一种爱来不来的感觉。不过考核的要求也很高，真的要发大子刊或者主刊，不然留不住。要是能留下来 tenure,还能分套房。",
+          "theme": "回国发展与人才政策"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "96bb56ec-cbe4-4fbe-aa80-4a515dce8ed5",
+          "relation": "related",
+          "reason": "两条记录都讨论国内科研职业环境和回国发展的现实条件",
+          "score": 0.78
+        },
+        {
+          "target_entry_id": "3c06693c-8ebb-4cec-84d7-444c87ffbb71",
+          "relation": "related",
+          "reason": "两条记录都涉及新加坡生物医学科研人物、资源和合作布局",
+          "score": 0.69
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-14--125fabf4-4210-4cb9-97c4-1f638a99f932.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-14--125fabf4-4210-4cb9-97c4-1f638a99f932.md"
+    },
+    {
+      "source_id": 73,
+      "source_uuid": "744057ba-27f0-42e4-b148-7396193485ef",
+      "source_created_at": "2026-05-14T15:05:54.007911+08:00",
+      "source_updated_at": "2026-05-14 15:05:54.007953",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:73@2026-05-14T15:05:54.007911+08:00",
+      "raw_sha256": "fc0f95db026fb5c319cf582585947fceefe7932b37755f87ba869290a1e11df6",
+      "entry_date": "2026-05-14",
+      "target_entry_id": "8ec90c99-df52-4d55-9597-6df446980bee",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "做了 20 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "35cde9ef-886f-458f-8647-ec9fad34e5c0",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-14--8ec90c99-df52-4d55-9597-6df446980bee.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-14--8ec90c99-df52-4d55-9597-6df446980bee.md"
+    },
+    {
+      "source_id": 74,
+      "source_uuid": "9260e2c1-d392-4614-83fd-78742efdcc46",
+      "source_created_at": "2026-05-14T18:10:28.531720+08:00",
+      "source_updated_at": "2026-05-14 18:10:28.531747",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:74@2026-05-14T18:10:28.531720+08:00",
+      "raw_sha256": "ee1ee03346dbb70c01cc2260ad9a4454bed3a64d943791ec69c5764dbc565f6b",
+      "entry_date": "2026-05-14",
+      "target_entry_id": "de32e743-ad07-46c8-b017-4ca86b65406a",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "做了 10 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "8ec90c99-df52-4d55-9597-6df446980bee",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-14--de32e743-ad07-46c8-b017-4ca86b65406a.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-14--de32e743-ad07-46c8-b017-4ca86b65406a.md"
+    },
+    {
+      "source_id": 75,
+      "source_uuid": "15503b91-2de1-42da-b886-00adab205ad0",
+      "source_created_at": "2026-05-14T18:10:38.104171+08:00",
+      "source_updated_at": "2026-05-14 18:10:38.104177",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:75@2026-05-14T18:10:38.104171+08:00",
+      "raw_sha256": "343168be1cf4fa58381bc0c545b11b05ac3085842e319fb81ddbb3f197dd9c92",
+      "entry_date": "2026-05-14",
+      "target_entry_id": "50c581ba-8fb2-451c-847b-4577d2b46fdd",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 20 个深蹲",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "de32e743-ad07-46c8-b017-4ca86b65406a",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-14--50c581ba-8fb2-451c-847b-4577d2b46fdd.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-14--50c581ba-8fb2-451c-847b-4577d2b46fdd.md"
+    },
+    {
+      "source_id": 76,
+      "source_uuid": "e6830f39-2a50-4645-b36e-966d42c3c5a4",
+      "source_created_at": "2026-05-15T11:08:33.754315+08:00",
+      "source_updated_at": "2026-05-15 11:08:33.754328",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:76@2026-05-15T11:08:33.754315+08:00",
+      "raw_sha256": "343168be1cf4fa58381bc0c545b11b05ac3085842e319fb81ddbb3f197dd9c92",
+      "entry_date": "2026-05-15",
+      "target_entry_id": "5618b744-a44c-4831-a583-7a81c93b83dc",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "刚刚做了 20 个深蹲",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "50c581ba-8fb2-451c-847b-4577d2b46fdd",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-15--5618b744-a44c-4831-a583-7a81c93b83dc.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-15--5618b744-a44c-4831-a583-7a81c93b83dc.md"
+    },
+    {
+      "source_id": 77,
+      "source_uuid": "52a3e602-815a-455f-8428-b86be4217dad",
+      "source_created_at": "2026-05-15T11:13:23.022239+08:00",
+      "source_updated_at": "2026-05-15 11:13:23.022245",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:77@2026-05-15T11:13:23.022239+08:00",
+      "raw_sha256": "ee1ee03346dbb70c01cc2260ad9a4454bed3a64d943791ec69c5764dbc565f6b",
+      "entry_date": "2026-05-15",
+      "target_entry_id": "005ac9d0-7c4a-46ae-a54e-a5cea192a8d2",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "做了 10 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "5618b744-a44c-4831-a583-7a81c93b83dc",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-15--005ac9d0-7c4a-46ae-a54e-a5cea192a8d2.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-15--005ac9d0-7c4a-46ae-a54e-a5cea192a8d2.md"
+    },
+    {
+      "source_id": 78,
+      "source_uuid": "5d0130bd-eccd-4bcf-9a21-788568643e62",
+      "source_created_at": "2026-05-16T10:44:03.171354+08:00",
+      "source_updated_at": "2026-05-16 10:44:03.171360",
+      "source_topic": "孩子",
+      "source_key": "project_pa:entries:78@2026-05-16T10:44:03.171354+08:00",
+      "raw_sha256": "6fe056381c45d67b3103095a70c540c418c8d6afe064756b15f43f0071940192",
+      "entry_date": "2026-05-16",
+      "target_entry_id": "21900569-2449-45c6-9d8e-00a6f4c50059",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "最近两周一直跟孩子练琴，因为他想要去考级。我主要还是想通过这次练琴的过程教会他几个原则。一个是分而治之。遇到困难的，庞大的项目，要懂得拆分，像练琴，要一次练一个小节，最后拼起来。告诉他像火车一样把车厢一个个连起来。第二就是要重复，让自己的神经形成正确的连接。并且依靠不停重复，把这些正确的连接固定住。所以一个小节要至少弹十次，而且弹对了就要继续，把正确的内容重复到一种永久记忆的程度。第三是人学习的时候觉得痛苦，其实就是神经重塑的过程，就像练肌肉会觉得累，那都是在成长。第四就是要他自己主动想要做什么，就要按照上面去做计划，要准备好承担这些痛苦，经历成长，才能有收获。我重视的是这个过程和他付出的努力，至于最后考级结果如何反而是其次。",
+          "theme": "孩子教育"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "a8511698-9308-4e55-b514-8a6b925f1462",
+          "relation": "continuation",
+          "reason": "延续记录对孩子练习、学习方法和成长过程的引导",
+          "score": 0.88
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-16--21900569-2449-45c6-9d8e-00a6f4c50059.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-16--21900569-2449-45c6-9d8e-00a6f4c50059.md"
+    },
+    {
+      "source_id": 79,
+      "source_uuid": "513d04ed-91fc-4afd-841e-53f648fdcf9c",
+      "source_created_at": "2026-05-16T16:59:52.656588+08:00",
+      "source_updated_at": "2026-05-16 16:59:52.656689",
+      "source_topic": "健身",
+      "source_key": "project_pa:entries:79@2026-05-16T16:59:52.656588+08:00",
+      "raw_sha256": "fc0f95db026fb5c319cf582585947fceefe7932b37755f87ba869290a1e11df6",
+      "entry_date": "2026-05-16",
+      "target_entry_id": "e7232ebc-fdaf-41eb-9b45-8d5ecca60ed3",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "做了 20 个引体向上",
+          "theme": "健身"
+        }
+      ],
+      "uncertainties": [],
+      "links": [
+        {
+          "target_entry_id": "005ac9d0-7c4a-46ae-a54e-a5cea192a8d2",
+          "relation": "continuation",
+          "reason": "与上一条健身训练记录构成连续日志",
+          "score": 0.92
+        }
+      ],
+      "followups": [],
+      "original_path": "/mnt/d/diary_agent/journals/originals/2026/05/2026-05-16--e7232ebc-fdaf-41eb-9b45-8d5ecca60ed3.md",
+      "clean_path": "/mnt/d/diary_agent/journals/cleaned/2026/05/2026-05-16--e7232ebc-fdaf-41eb-9b45-8d5ecca60ed3.md"
+    }
+  ],
+  "resolved_ambiguities": [
+    {
+      "source_id": 52,
+      "resolution": "确认艾名为正确表述；清除不确定标记"
+    },
+    {
+      "source_id": 72,
+      "resolution": "Pirece 更正为 Pierce"
+    },
+    {
+      "source_id": 72,
+      "resolution": "巍巍的人为正确表述；保持不变"
+    },
+    {
+      "source_id": 72,
+      "resolution": "独立缩写 WL 全部展开为 Wai Leong"
+    }
+  ],
+  "approved_preview_sha256": "543b6445a71211d5a6c613af80e29807851e174744df2195b46a2916e419ffe2"
+}

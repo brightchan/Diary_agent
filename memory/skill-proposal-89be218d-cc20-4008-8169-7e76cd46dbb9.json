@@ -1,0 +1,23 @@
+{
+  "feedback_ids": [
+    "1e9520ea-bbba-4bd8-861f-50caad7dc3b6",
+    "6e4005de-5bc3-445d-b956-4986fcf15a7f",
+    "8e485105-2361-4c7e-b211-bc8e11ab3c94"
+  ],
+  "problem_summary": "现有日记系统会在确认时自动创建主题，并以一个 segment 对应一个 theme 的方式保存，但没有周度主题治理流程：无法审阅 Active/Inactive、合并、拆分或重新标记建议，也没有审批和审计记录。现有 memory 目录只保存工作流信息，尚不能结构化记录人生目标、短期目标和周目标，因而无法把用户确认的目标作为相关对话和周总结的长期上下文。",
+  "impact": "主题数量会持续自然增长，近义或过时主题仍会参与分类与主题驱动检索，用户难以维护当前真正有用的主题集合。目标只能散落在日记正文中，状态、层级和变化历史不稳定，也无法可靠地指导后续对话。",
+  "proposed_diff": "1. 保留现有 segments.theme_id 模型，一个 segment 对应一个主题 Tag；不新增 entry_themes，不建立重复的文章级 Tag 层。\n2. 将 themes.status 明确定义为 active、inactive、merged。Active 列表直接查询 themes 表，不维护独立列表文件。Inactive 主题及历史 segments 原样保留，但不进入新日记分类候选、默认主题筛选或主题驱动检索；文章正文仍可通过全文检索命中。Merged 主题保留历史名称和 merged_into 指针，分析时可解析到规范主题。\n3. 新增 theme_change_proposals 表，记录周度建议的 action、source_theme_id、target_theme_id、payload、evidence、status、created_at、decided_at 和 applied_at。支持 create、activate、deactivate、rename、merge、split、reassign_segment；任何操作都必须先预览并由用户逐项确认。拆分默认只创建新的 Active 主题并停用旧主题，不自动改写历史 segment；历史重标必须单独确认。\n4. 增加 theme-review-context、save-theme-review 和 apply-theme-changes 命令。weekly-context 返回 Active/Inactive 主题、近期与累计使用次数、代表性 segment、可能重叠和过宽主题的紧凑证据。应用状态变化后刷新受影响的主题检索索引；不得修改 original Markdown，也不自动重写已确认 cleaned Markdown 中的历史主题快照。\n5. 新增 goals 表，字段包括 scope(life/short_term/weekly)、parent_goal_id、title、description、status、priority、start_date、target_date、success_criteria、created_at、updated_at；新增 goal_events 作为不可变变更历史；新增 goal_entry_links 保存经确认的 progress、blocker、reflection 或 related 关系及证据。\n6. 增加 goal-change-preview、apply-goal-changes、goal-context 和 conversation-context 命令。新增、修改、完成、暂停或放弃目标必须预览并确认。conversation-context 仅返回与当前问题相关的 Active 目标、近期目标事件和少量证据，不把全部目标注入每次对话，不把推断写成用户目标。\n7. weekly-context 同时返回目标层级和本周相关证据；周总结增加目标进展、阻碍、目标是否需要调整、下周目标草案，以及主题整理建议。目标或主题变更都在周总结确认后单独应用。\n8. SQLite 继续作为结构化真相来源；生成 memory/goals.md 作为可读镜像，包含当前人生、短期、周目标和最近确认的变更历史。保留所有 verbatim originals，目标镜像只能由核心目标确认/导出路径生成。\n9. 更新 CLI、SKILL.md、agent-protocol.md、storage-schema.md 和 README，明确 Active/Inactive 检索边界、目标上下文使用规则、确认门槛和周度流程。保持 local-first、standard-library-first，绝不添加 OpenAI API 客户端、密钥或外部模型调用。",
+  "compatibility": "采用增量、幂等的 SQLite 建表和迁移。现有主题默认保持 active，现有 segments、entries、FTS、原始 Markdown 和已确认 cleaned Markdown 保持有效。没有主题被自动停用或重分类；没有目标会从旧日记中被自动认定。正文全文检索继续覆盖所有已确认文章，只有主题候选和主题驱动匹配默认排除 inactive/merged。",
+  "tests": [
+    "迁移现有数据库并验证所有现有 segment-theme 关联、主题名称和 Markdown 文件保持不变",
+    "验证 active 主题进入分类候选和主题检索，inactive 主题不进入，但包含相同文字的文章仍可通过正文检索命中",
+    "验证主题建议在未确认时不能改变 themes 或 segments，逐项确认后才应用，并记录完整审计时间线",
+    "验证 merge/split 不自动重写历史 segments；显式 reassign_segment 只修改被确认的目标 segment",
+    "验证人生、短期、周目标的父子层级、状态变更、事件历史、目标与日记证据链接及 Markdown 镜像",
+    "验证 conversation-context 只返回相关 Active 目标，并在无相关目标时返回空上下文",
+    "验证 weekly-context 同时提供紧凑的主题整理证据和目标进展证据，且空周仍能安全退出",
+    "验证 original Markdown 字节不变，已确认 cleaned Markdown 不被主题状态变化隐式重写",
+    "运行 python -m pytest 和 skill-creator quick_validate.py"
+  ],
+  "token_cost_change": "increase：周总结会增加紧凑的主题治理和目标证据，对话会按相关性加入少量 Active 目标上下文；通过数据库聚合、只取 Active/相关记录、证据截断和空上下文快速退出控制增量。"
+}
