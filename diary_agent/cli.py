@@ -67,6 +67,29 @@ def parser() -> argparse.ArgumentParser:
     weekly = commands.add_parser("weekly-context")
     weekly.add_argument("--now", help="ISO datetime for testing")
 
+    theme_context = commands.add_parser("theme-review-context")
+    theme_context.add_argument("--now", help="ISO datetime for testing")
+
+    theme_review = commands.add_parser("save-theme-review")
+    theme_review.add_argument("--changes", required=True, help="JSON string or file")
+
+    theme_apply = commands.add_parser("apply-theme-changes")
+    theme_apply.add_argument("--decisions", required=True, help="JSON string or file")
+
+    goal_preview = commands.add_parser("goal-change-preview")
+    goal_preview.add_argument("--changes", required=True, help="JSON string or file")
+
+    goal_apply = commands.add_parser("apply-goal-changes")
+    goal_apply.add_argument("--decisions", required=True, help="JSON string or file")
+
+    goal_context = commands.add_parser("goal-context")
+    goal_context.add_argument("--query")
+    goal_context.add_argument("--status", default="active", choices=["active", "completed", "paused", "abandoned", "all"])
+
+    conversation = commands.add_parser("conversation-context")
+    conversation.add_argument("--query", required=True)
+    conversation.add_argument("--token-budget", type=int, default=700)
+
     review = commands.add_parser("feedback-review-context")
     review.add_argument("--now", help="ISO datetime for testing")
 
@@ -117,6 +140,21 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "weekly-context":
             moment = datetime.fromisoformat(args.now).replace(tzinfo=TZ) if args.now else None
             result = store.weekly_context(moment)
+        elif args.command == "theme-review-context":
+            moment = datetime.fromisoformat(args.now).replace(tzinfo=TZ) if args.now else None
+            result = store.theme_review_context(moment)
+        elif args.command == "save-theme-review":
+            result = store.save_theme_review(load_json(args.changes, []))
+        elif args.command == "apply-theme-changes":
+            result = store.apply_theme_changes(load_json(args.decisions, []))
+        elif args.command == "goal-change-preview":
+            result = store.goal_change_preview(load_json(args.changes, []))
+        elif args.command == "apply-goal-changes":
+            result = store.apply_goal_changes(load_json(args.decisions, []))
+        elif args.command == "goal-context":
+            result = store.goal_context(args.query, args.status)
+        elif args.command == "conversation-context":
+            result = store.conversation_context(args.query, args.token_budget)
         elif args.command == "feedback-review-context":
             moment = datetime.fromisoformat(args.now).replace(tzinfo=TZ) if args.now else None
             result = store.feedback_review_context(moment)

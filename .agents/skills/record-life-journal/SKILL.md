@@ -1,6 +1,6 @@
 ---
 name: record-life-journal
-description: Capture, clean, classify, connect, review, confirm, search, and summarize personal diary entries with local SQLite and Markdown storage. Use for daily or weekly journaling, spoken-text cleanup, life-theme classification, follow-up reflection, recalling prior experiences, recording workflow feedback, or proposing improvements to this diary skill.
+description: Capture, clean, classify, connect, review, confirm, search, and summarize personal diary entries; govern themes and confirmed life, short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences, workflow feedback, or diary skill improvements.
 ---
 
 # Record Life Journal
@@ -43,7 +43,8 @@ python .agents/skills/record-life-journal/scripts/journal.py --root . local-clea
 ## Classify and connect
 
 - Preserve one complete narrative and represent multiple ideas as ordered segments.
-- Reuse an existing theme when evidence supports it. Mark a proposed new theme in the preview.
+- Reuse an Active theme when evidence supports it. Exclude Inactive and Merged themes from new classification candidates; resolve a Merged name to its Active canonical target.
+- Mark a proposed new theme in the preview.
 - Never merge themes without explicit confirmation.
 - Link an older entry only when the relationship is supported by its text. Separate evidence from inference.
 - Ask at most one ordinary-diary reflection question, only for a meaningful unfinished or continuing thread.
@@ -74,8 +75,20 @@ At Monday 01:00 Asia/Singapore:
 1. Run `weekly-context`.
 2. Exit without an agent call when `has_content` is false.
 3. When content exists, create a weekly draft covering the returned period.
-4. Summarize facts, feelings/insights, theme progress, unfinished threads, and next-week actions.
-5. Add 2-5 optional questions and wait for confirmation before final storage.
+4. Summarize facts, feelings/insights, theme progress, goal progress and blockers, unfinished threads, and next-week actions.
+5. Include goal-adjustment drafts and theme-governance suggestions as separate review items. Never apply them through weekly-journal confirmation.
+6. Add 2-5 optional questions and wait for confirmation before final storage.
+
+## Govern themes and goals
+
+Read [agent-protocol.md](references/agent-protocol.md) before preparing change payloads.
+
+- Run `theme-review-context` for Active, Inactive, and Merged themes plus compact usage evidence. Save suggestions with `save-theme-review`; apply only explicit per-item decisions through `apply-theme-changes`.
+- Support `create`, `activate`, `deactivate`, `rename`, `merge`, `split`, and explicit `reassign_segment`. Split creates Active replacements and deactivates the source; it never rewrites historical segments unless a separate reassign proposal is approved.
+- Keep Inactive theme text searchable through entry full text, but exclude its tag from default theme-driven retrieval. Keep Merged history and resolve it to the canonical Active theme.
+- Save goal proposals with `goal-change-preview`; apply only explicit per-item decisions through `apply-goal-changes`. Never infer an old diary statement into a user goal.
+- Use `goal-context` for goal review. Use `conversation-context` to retrieve only relevant Active goals, recent events, and a small evidence set for a current question.
+- Treat SQLite as truth. Regenerate `memory/goals.md` only after confirmed goal changes. Never modify originals or silently rewrite confirmed cleaned Markdown when theme or goal state changes.
 
 ## Feedback and weekly skill improvement
 

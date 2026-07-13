@@ -53,6 +53,19 @@ CREATE TABLE IF NOT EXISTS themes (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS theme_change_proposals (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL CHECK(action IN ('create','activate','deactivate','rename','merge','split','reassign_segment')),
+    source_theme_id TEXT REFERENCES themes(id),
+    target_theme_id TEXT REFERENCES themes(id),
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed','approved','rejected','applied')),
+    created_at TEXT NOT NULL,
+    decided_at TEXT,
+    applied_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS segments (
     id TEXT PRIMARY KEY,
     entry_id TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
@@ -96,6 +109,52 @@ CREATE TABLE IF NOT EXISTS followups (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS goals (
+    id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL CHECK(scope IN ('life','short_term','weekly')),
+    parent_goal_id TEXT REFERENCES goals(id),
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','paused','abandoned')),
+    priority INTEGER NOT NULL DEFAULT 0,
+    start_date TEXT,
+    target_date TEXT,
+    success_criteria TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS goal_events (
+    id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(id),
+    event_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS goal_entry_links (
+    id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(id),
+    entry_id TEXT NOT NULL REFERENCES entries(id),
+    relation TEXT NOT NULL CHECK(relation IN ('progress','blocker','reflection','related')),
+    evidence TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE(goal_id, entry_id, relation, evidence)
+);
+
+CREATE TABLE IF NOT EXISTS goal_change_proposals (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL CHECK(action IN ('create','update','complete','pause','abandon','activate','link_entry')),
+    goal_id TEXT,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed','approved','rejected','applied')),
+    created_at TEXT NOT NULL,
+    decided_at TEXT,
+    applied_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS feedback_events (
     id TEXT PRIMARY KEY,
     content TEXT NOT NULL,
@@ -131,6 +190,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
     themes,
     tokenize='unicode61'
 );
+
+CREATE INDEX IF NOT EXISTS idx_themes_status ON themes(status);
+CREATE INDEX IF NOT EXISTS idx_theme_changes_status ON theme_change_proposals(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_goals_status_scope ON goals(status, scope, priority);
+CREATE INDEX IF NOT EXISTS idx_goal_events_goal_created ON goal_events(goal_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_goal_links_goal_created ON goal_entry_links(goal_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_goal_changes_status ON goal_change_proposals(status, created_at);
 """
 
 
@@ -211,6 +277,7 @@ class DiaryStore:
             "workflow-feedback.md": "# Workflow Feedback\n\n",
             "workflow-decisions.md": "# Workflow Decisions\n\n",
             "skill-change-history.md": "# Skill Change History\n\n",
+            "goals.md": "# Goals\n\nNo confirmed goals.\n",
         }
         for name, content in memory_files.items():
             path = self.paths.memory / name
@@ -389,12 +456,18 @@ class DiaryStore:
             preview = json.loads(row["preview_json"])
             db.execute("DELETE FROM segments WHERE entry_id=?", (entry_id,))
             theme_names = []
+            stored_segments = []
             for segment in preview.get("segments", []):
                 theme_id = self._ensure_theme(db, segment["theme"])
-                theme_names.append(segment["theme"])
+                theme = self._canonical_theme_row(db, theme_id)
+                if not theme or theme["status"] != "active":
+                    raise ValueError(f"theme is not active: {segment['theme']}")
+                theme_name = str(theme["name"])
+                theme_names.append(theme_name)
+                stored_segments.append({**segment, "theme": theme_name})
                 db.execute(
                     "INSERT INTO segments(id,entry_id,position,text,theme_id,theme_name) VALUES(?,?,?,?,?,?)",
-                    (str(uuid.uuid4()), entry_id, segment["position"], segment["text"], theme_id, segment["theme"]),
+                    (str(uuid.uuid4()), entry_id, segment["position"], segment["text"], theme["id"], theme_name),
                 )
             for link in preview.get("links", []):
                 target = str(link.get("target_entry_id", ""))
@@ -410,8 +483,9 @@ class DiaryStore:
                         "INSERT INTO followups(id,entry_id,question,status,revisit_after,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
                         (str(uuid.uuid4()), entry_id, question, followup.get("status", "pending"), followup.get("revisit_after"), _iso(), _iso()),
                     )
+            preview = {**preview, "segments": stored_segments}
             confirmed_at = _iso()
-            db.execute("UPDATE entries SET status='confirmed',confirmed_at=?,updated_at=? WHERE id=?", (confirmed_at, confirmed_at, entry_id))
+            db.execute("UPDATE entries SET status='confirmed',preview_json=?,confirmed_at=?,updated_at=? WHERE id=?", (_json(preview), confirmed_at, confirmed_at, entry_id))
             db.execute("DELETE FROM entries_fts WHERE entry_id=?", (entry_id,))
             db.execute("INSERT INTO entries_fts(entry_id,clean_text,themes) VALUES(?,?,?)", (entry_id, row["clean_text"], " ".join(theme_names)))
             db.commit()
@@ -449,6 +523,7 @@ class DiaryStore:
         return {"feedback_id": feedback_id, "status": "new"}
 
     def weekly_context(self, now: datetime | None = None) -> dict[str, Any]:
+        self.initialize()
         moment = (now or _now()).astimezone(TZ)
         this_monday = (moment - timedelta(days=moment.weekday())).date()
         start = this_monday - timedelta(days=7)
@@ -462,7 +537,539 @@ class DiaryStore:
             for row in rows:
                 preview = json.loads(row["preview_json"] or "{}")
                 records.append({"entry_id": row["id"], "date": row["entry_date"], "clean_text": row["clean_text"], "segments": preview.get("segments", [])})
-        return {"period_start": start.isoformat(), "period_end": end.isoformat(), "has_content": bool(records), "entries": records}
+            goals = self._weekly_goal_context(db, start.isoformat(), end.isoformat())
+        return {
+            "period_start": start.isoformat(),
+            "period_end": end.isoformat(),
+            "has_content": bool(records),
+            "entries": records,
+            "goals": goals,
+            "theme_review": self.theme_review_context(moment),
+        }
+
+    def theme_review_context(self, now: datetime | None = None) -> dict[str, Any]:
+        self.initialize()
+        moment = (now or _now()).astimezone(TZ)
+        recent_start = (moment.date() - timedelta(days=90)).isoformat()
+        with self.connect() as db:
+            rows = db.execute(
+                """SELECT t.*, COUNT(s.id) AS total_uses,
+                   SUM(CASE WHEN e.entry_date>=? THEN 1 ELSE 0 END) AS recent_uses
+                   FROM themes t
+                   LEFT JOIN segments s ON s.theme_id=t.id
+                   LEFT JOIN entries e ON e.id=s.entry_id AND e.status='confirmed'
+                   GROUP BY t.id ORDER BY t.status, total_uses DESC, t.name""",
+                (recent_start,),
+            ).fetchall()
+            themes: list[dict[str, Any]] = []
+            for row in rows:
+                item = dict(row)
+                representatives = db.execute(
+                    """SELECT s.id AS segment_id,s.entry_id,e.entry_date,s.text
+                       FROM segments s JOIN entries e ON e.id=s.entry_id
+                       WHERE s.theme_id=? AND e.status='confirmed'
+                       ORDER BY e.entry_date DESC,s.position LIMIT 3""",
+                    (row["id"],),
+                ).fetchall()
+                item["representative_segments"] = [dict(value) for value in representatives]
+                item["aliases"] = json.loads(item.pop("aliases_json") or "[]")
+                themes.append(item)
+            active = [item for item in themes if item["status"] == "active"]
+            overlaps = []
+            for index, left in enumerate(active):
+                for right in active[index + 1 :]:
+                    score = _cosine(_ngrams(left["name"]), _ngrams(right["name"]))
+                    if score >= 0.55:
+                        overlaps.append({"left_theme_id": left["id"], "right_theme_id": right["id"], "score": round(score, 4), "reason": "similar theme names"})
+            total_segments = sum(int(item["total_uses"] or 0) for item in active)
+            broad_threshold = max(4, math.ceil(total_segments * 0.25))
+            broad = [
+                {"theme_id": item["id"], "name": item["name"], "total_uses": item["total_uses"], "reason": "high share of tagged segments"}
+                for item in active
+                if int(item["total_uses"] or 0) >= broad_threshold
+            ]
+            pending = db.execute(
+                "SELECT * FROM theme_change_proposals WHERE status='proposed' ORDER BY created_at"
+            ).fetchall()
+        return {
+            "recent_start": recent_start,
+            "active": active,
+            "inactive": [item for item in themes if item["status"] == "inactive"],
+            "merged": [item for item in themes if item["status"] == "merged"],
+            "possible_overlaps": overlaps,
+            "possibly_broad": broad,
+            "pending_proposals": [self._decode_proposal(row) for row in pending],
+        }
+
+    def save_theme_review(self, changes: list[dict[str, Any]]) -> dict[str, Any]:
+        self.initialize()
+        allowed = {"create", "activate", "deactivate", "rename", "merge", "split", "reassign_segment"}
+        if not changes:
+            raise ValueError("changes must not be empty")
+        created = []
+        with self.connect() as db:
+            for change in changes:
+                action = str(change.get("action", ""))
+                if action not in allowed:
+                    raise ValueError(f"invalid theme action: {action}")
+                source = change.get("source_theme_id")
+                target = change.get("target_theme_id")
+                payload = dict(change.get("payload") or {})
+                evidence = change.get("evidence") or []
+                if action not in {"create", "reassign_segment"} and not source:
+                    raise ValueError(f"{action} requires source_theme_id")
+                if action == "merge" and not target:
+                    raise ValueError("merge requires target_theme_id")
+                if source and not db.execute("SELECT 1 FROM themes WHERE id=?", (source,)).fetchone():
+                    raise KeyError(str(source))
+                if target and not db.execute("SELECT 1 FROM themes WHERE id=?", (target,)).fetchone():
+                    raise KeyError(str(target))
+                proposal_id = str(uuid.uuid4())
+                now = _iso()
+                db.execute(
+                    """INSERT INTO theme_change_proposals
+                       (id,action,source_theme_id,target_theme_id,payload_json,evidence_json,status,created_at)
+                       VALUES(?,?,?,?,?,?, 'proposed',?)""",
+                    (proposal_id, action, source, target, _json(payload), _json(evidence), now),
+                )
+                created.append({"proposal_id": proposal_id, "action": action, "status": "proposed", "payload": payload, "evidence": evidence})
+            db.commit()
+        return {"proposals": created, "requires_confirmation": True}
+
+    def apply_theme_changes(self, decisions: list[dict[str, Any]]) -> dict[str, Any]:
+        self.initialize()
+        if not decisions:
+            raise ValueError("decisions must not be empty")
+        results = []
+        with self.connect() as db:
+            for decision in decisions:
+                proposal_id = str(decision.get("proposal_id", ""))
+                verdict = str(decision.get("decision", ""))
+                if verdict not in {"approved", "rejected"}:
+                    raise ValueError("each decision must be approved or rejected")
+                row = db.execute("SELECT * FROM theme_change_proposals WHERE id=?", (proposal_id,)).fetchone()
+                if not row:
+                    raise KeyError(proposal_id)
+                if row["status"] in {"applied", "rejected"}:
+                    results.append({"proposal_id": proposal_id, "status": row["status"], "idempotent": True})
+                    continue
+                now = _iso()
+                if verdict == "rejected":
+                    db.execute("UPDATE theme_change_proposals SET status='rejected',decided_at=? WHERE id=?", (now, proposal_id))
+                    results.append({"proposal_id": proposal_id, "status": "rejected", "idempotent": False})
+                    continue
+                db.execute("UPDATE theme_change_proposals SET status='approved',decided_at=? WHERE id=?", (now, proposal_id))
+                details = self._apply_theme_change(db, row)
+                applied_at = _iso()
+                db.execute("UPDATE theme_change_proposals SET status='applied',applied_at=? WHERE id=?", (applied_at, proposal_id))
+                results.append({"proposal_id": proposal_id, "status": "applied", "idempotent": False, **details})
+            db.commit()
+        return {"results": results}
+
+    def goal_change_preview(self, changes: list[dict[str, Any]]) -> dict[str, Any]:
+        self.initialize()
+        allowed = {"create", "update", "complete", "pause", "abandon", "activate", "link_entry"}
+        if not changes:
+            raise ValueError("changes must not be empty")
+        refs: dict[str, str] = {}
+        normalized: list[dict[str, Any]] = []
+        for change in changes:
+            action = str(change.get("action", ""))
+            if action not in allowed:
+                raise ValueError(f"invalid goal action: {action}")
+            payload = dict(change.get("payload") or {})
+            if action == "create":
+                goal_id = str(change.get("goal_id") or payload.get("goal_id") or uuid.uuid4())
+                payload["goal_id"] = goal_id
+                if change.get("ref"):
+                    refs[str(change["ref"])] = goal_id
+            normalized.append({"action": action, "goal_id": change.get("goal_id") or payload.get("goal_id"), "payload": payload, "evidence": change.get("evidence") or []})
+        for original, item in zip(changes, normalized):
+            payload = item["payload"]
+            if original.get("goal_ref"):
+                item["goal_id"] = refs.get(str(original["goal_ref"]), str(original["goal_ref"]))
+            if original.get("parent_ref"):
+                payload["parent_goal_id"] = refs.get(str(original["parent_ref"]), str(original["parent_ref"]))
+        created = []
+        with self.connect() as db:
+            for item in normalized:
+                proposal_id = str(uuid.uuid4())
+                now = _iso()
+                db.execute(
+                    """INSERT INTO goal_change_proposals
+                       (id,action,goal_id,payload_json,evidence_json,status,created_at)
+                       VALUES(?,?,?,?,?,'proposed',?)""",
+                    (proposal_id, item["action"], item["goal_id"], _json(item["payload"]), _json(item["evidence"]), now),
+                )
+                created.append({"proposal_id": proposal_id, **item, "status": "proposed"})
+            db.commit()
+        return {"proposals": created, "requires_confirmation": True}
+
+    def apply_goal_changes(self, decisions: list[dict[str, Any]]) -> dict[str, Any]:
+        self.initialize()
+        if not decisions:
+            raise ValueError("decisions must not be empty")
+        results = []
+        approved: list[sqlite3.Row] = []
+        with self.connect() as db:
+            for decision in decisions:
+                proposal_id = str(decision.get("proposal_id", ""))
+                verdict = str(decision.get("decision", ""))
+                if verdict not in {"approved", "rejected"}:
+                    raise ValueError("each decision must be approved or rejected")
+                row = db.execute("SELECT * FROM goal_change_proposals WHERE id=?", (proposal_id,)).fetchone()
+                if not row:
+                    raise KeyError(proposal_id)
+                if row["status"] in {"applied", "rejected"}:
+                    results.append({"proposal_id": proposal_id, "status": row["status"], "idempotent": True})
+                    continue
+                now = _iso()
+                if verdict == "rejected":
+                    db.execute("UPDATE goal_change_proposals SET status='rejected',decided_at=? WHERE id=?", (now, proposal_id))
+                    results.append({"proposal_id": proposal_id, "status": "rejected", "idempotent": False})
+                else:
+                    db.execute("UPDATE goal_change_proposals SET status='approved',decided_at=? WHERE id=?", (now, proposal_id))
+                    approved.append(row)
+            pending = list(approved)
+            while pending:
+                progressed = False
+                for row in list(pending):
+                    try:
+                        details = self._apply_goal_change(db, row)
+                    except KeyError:
+                        continue
+                    applied_at = _iso()
+                    db.execute("UPDATE goal_change_proposals SET status='applied',applied_at=? WHERE id=?", (applied_at, row["id"]))
+                    results.append({"proposal_id": row["id"], "status": "applied", "idempotent": False, **details})
+                    pending.remove(row)
+                    progressed = True
+                if not progressed:
+                    missing = ", ".join(str(row["goal_id"]) for row in pending)
+                    raise ValueError(f"approved goal changes have missing dependencies: {missing}")
+            db.commit()
+        if any(item["status"] == "applied" and not item.get("idempotent") for item in results):
+            self._write_goals_mirror()
+        return {"results": results, "goals_path": str(self.paths.memory / "goals.md")}
+
+    def goal_context(self, query: str | None = None, status: str = "active") -> dict[str, Any]:
+        self.initialize()
+        allowed_statuses = {"active", "completed", "paused", "abandoned", "all"}
+        if status not in allowed_statuses:
+            raise ValueError("invalid goal status")
+        with self.connect() as db:
+            sql = "SELECT * FROM goals"
+            params: list[Any] = []
+            if status != "all":
+                sql += " WHERE status=?"
+                params.append(status)
+            sql += " ORDER BY priority DESC, scope, created_at"
+            rows = db.execute(sql, params).fetchall()
+            records = [self._goal_record(db, row) for row in rows]
+        if query:
+            vector = _ngrams(query)
+            records = [item for item in records if _cosine(vector, _ngrams(self._goal_search_text(item))) >= 0.08 or _normalize(query) in _normalize(self._goal_search_text(item))]
+        return {"has_goals": bool(records), "goals": records}
+
+    def conversation_context(self, query: str, token_budget: int = 700) -> dict[str, Any]:
+        self.initialize()
+        text = query.strip()
+        if not text:
+            raise ValueError("query must not be empty")
+        vector = _ngrams(text)
+        scored = []
+        with self.connect() as db:
+            rows = db.execute("SELECT * FROM goals WHERE status='active' ORDER BY priority DESC,updated_at DESC").fetchall()
+            for row in rows:
+                record = self._goal_record(db, row, event_limit=3, evidence_limit=3)
+                haystack = self._goal_search_text(record)
+                score = _cosine(vector, _ngrams(haystack))
+                if _normalize(text) in _normalize(haystack) or _normalize(row["title"]) in _normalize(text):
+                    score = max(score, 0.75)
+                if score >= 0.08:
+                    scored.append((score, record))
+        scored.sort(key=lambda item: (item[0], item[1]["priority"]), reverse=True)
+        budget = max(300, token_budget * 2)
+        selected = []
+        used = 0
+        for score, record in scored:
+            size = len(_json(record))
+            if selected and used + size > budget:
+                break
+            record["relevance_score"] = round(score, 4)
+            selected.append(record)
+            used += size
+        return {"has_context": bool(selected), "query": text, "goals": selected}
+
+    def _decode_proposal(self, row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        item["payload"] = json.loads(item.pop("payload_json") or "{}")
+        item["evidence"] = json.loads(item.pop("evidence_json") or "[]")
+        return item
+
+    def _apply_theme_change(self, db: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
+        action = str(row["action"])
+        payload = json.loads(row["payload_json"] or "{}")
+        source_id = row["source_theme_id"]
+        target_id = row["target_theme_id"]
+        affected_entries: set[str] = set()
+        if source_id:
+            affected_entries.update(value[0] for value in db.execute("SELECT DISTINCT entry_id FROM segments WHERE theme_id=?", (source_id,)).fetchall())
+        if action == "create":
+            created = self._create_theme(db, payload)
+            return {"theme_ids": [created["id"]]}
+        if action == "reassign_segment":
+            segment_id = str(payload.get("segment_id", ""))
+            segment = db.execute("SELECT * FROM segments WHERE id=?", (segment_id,)).fetchone()
+            if not segment:
+                raise KeyError(segment_id)
+            chosen_target = target_id or payload.get("target_theme_id")
+            target = self._canonical_theme_row(db, str(chosen_target)) if chosen_target else None
+            if not target or target["status"] != "active":
+                raise ValueError("reassign_segment requires an active target theme")
+            db.execute("UPDATE segments SET theme_id=?,theme_name=? WHERE id=?", (target["id"], target["name"], segment_id))
+            self._refresh_entry_fts(db, {str(segment["entry_id"])})
+            return {"segment_id": segment_id, "theme_ids": [target["id"]]}
+        source = db.execute("SELECT * FROM themes WHERE id=?", (source_id,)).fetchone()
+        if not source:
+            raise KeyError(str(source_id))
+        if action == "activate":
+            db.execute("UPDATE themes SET status='active',merged_into=NULL,updated_at=? WHERE id=?", (_iso(), source_id))
+        elif action == "deactivate":
+            db.execute("UPDATE themes SET status='inactive',merged_into=NULL,updated_at=? WHERE id=?", (_iso(), source_id))
+        elif action == "rename":
+            name = str(payload.get("name", "")).strip()
+            if not name:
+                raise ValueError("rename requires payload.name")
+            conflict = db.execute("SELECT id FROM themes WHERE normalized_name=? AND id<>?", (_normalize(name), source_id)).fetchone()
+            if conflict:
+                raise ValueError("theme name already exists")
+            aliases = json.loads(source["aliases_json"] or "[]")
+            if source["name"] not in aliases:
+                aliases.append(source["name"])
+            db.execute("UPDATE themes SET name=?,normalized_name=?,aliases_json=?,updated_at=? WHERE id=?", (name, _normalize(name), _json(aliases), _iso(), source_id))
+        elif action == "merge":
+            target = self._canonical_theme_row(db, str(target_id))
+            if not target or target["status"] != "active" or target["id"] == source_id:
+                raise ValueError("merge requires a different active target theme")
+            db.execute("UPDATE themes SET status='merged',merged_into=?,updated_at=? WHERE id=?", (target["id"], _iso(), source_id))
+        elif action == "split":
+            new_themes = payload.get("themes") or payload.get("new_themes") or []
+            if len(new_themes) < 2:
+                raise ValueError("split requires at least two new themes")
+            created_ids = []
+            for item in new_themes:
+                values = {"name": item} if isinstance(item, str) else dict(item)
+                created_ids.append(self._create_theme(db, values)["id"])
+            db.execute("UPDATE themes SET status='inactive',merged_into=NULL,updated_at=? WHERE id=?", (_iso(), source_id))
+            self._refresh_entry_fts(db, affected_entries)
+            return {"theme_ids": created_ids, "source_theme_id": source_id}
+        else:
+            raise ValueError(action)
+        self._refresh_entry_fts(db, affected_entries)
+        return {"theme_ids": [str(source_id)]}
+
+    def _create_theme(self, db: sqlite3.Connection, payload: dict[str, Any]) -> sqlite3.Row:
+        name = str(payload.get("name", "")).strip()
+        if not name:
+            raise ValueError("theme creation requires a name")
+        if db.execute("SELECT 1 FROM themes WHERE normalized_name=?", (_normalize(name),)).fetchone():
+            raise ValueError("theme name already exists")
+        theme_id = str(payload.get("theme_id") or uuid.uuid4())
+        now = _iso()
+        db.execute(
+            "INSERT INTO themes(id,name,normalized_name,description,aliases_json,status,created_at,updated_at) VALUES(?,?,?,?,?,'active',?,?)",
+            (theme_id, name, _normalize(name), str(payload.get("description", "")), _json(payload.get("aliases") or []), now, now),
+        )
+        return db.execute("SELECT * FROM themes WHERE id=?", (theme_id,)).fetchone()
+
+    def _canonical_theme_row(self, db: sqlite3.Connection, theme_id: str) -> sqlite3.Row | None:
+        current = db.execute("SELECT * FROM themes WHERE id=?", (theme_id,)).fetchone()
+        seen = set()
+        while current and current["status"] == "merged" and current["merged_into"]:
+            if current["id"] in seen:
+                raise ValueError("theme merge cycle detected")
+            seen.add(current["id"])
+            current = db.execute("SELECT * FROM themes WHERE id=?", (current["merged_into"],)).fetchone()
+        return current
+
+    def _refresh_entry_fts(self, db: sqlite3.Connection, entry_ids: Iterable[str]) -> None:
+        for entry_id in set(entry_ids):
+            entry = db.execute("SELECT clean_text,status FROM entries WHERE id=?", (entry_id,)).fetchone()
+            if not entry or entry["status"] != "confirmed":
+                continue
+            names = []
+            for segment in db.execute("SELECT theme_id FROM segments WHERE entry_id=? ORDER BY position", (entry_id,)).fetchall():
+                if not segment["theme_id"]:
+                    continue
+                theme = self._canonical_theme_row(db, str(segment["theme_id"]))
+                if theme and theme["status"] == "active" and theme["name"] not in names:
+                    names.append(str(theme["name"]))
+            db.execute("DELETE FROM entries_fts WHERE entry_id=?", (entry_id,))
+            db.execute("INSERT INTO entries_fts(entry_id,clean_text,themes) VALUES(?,?,?)", (entry_id, entry["clean_text"] or "", " ".join(names)))
+
+    def _apply_goal_change(self, db: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
+        action = str(row["action"])
+        goal_id = str(row["goal_id"] or "")
+        payload = json.loads(row["payload_json"] or "{}")
+        evidence = json.loads(row["evidence_json"] or "[]")
+        now = _iso()
+        if action == "create":
+            goal_id = str(payload.get("goal_id") or goal_id or uuid.uuid4())
+            scope = str(payload.get("scope", ""))
+            title = str(payload.get("title", "")).strip()
+            if scope not in {"life", "short_term", "weekly"} or not title:
+                raise ValueError("goal creation requires scope and title")
+            parent = payload.get("parent_goal_id")
+            self._validate_goal_parent(db, goal_id, scope, parent)
+            db.execute(
+                """INSERT INTO goals(id,scope,parent_goal_id,title,description,status,priority,start_date,target_date,success_criteria,created_at,updated_at)
+                   VALUES(?,?,?,?,?,'active',?,?,?,?,?,?)""",
+                (goal_id, scope, parent, title, str(payload.get("description", "")), int(payload.get("priority", 0)), payload.get("start_date"), payload.get("target_date"), str(payload.get("success_criteria", "")), now, now),
+            )
+            event_type = "created"
+        else:
+            current = db.execute("SELECT * FROM goals WHERE id=?", (goal_id,)).fetchone()
+            if not current:
+                raise KeyError(goal_id)
+            if action == "update":
+                allowed = {"scope", "parent_goal_id", "title", "description", "priority", "start_date", "target_date", "success_criteria"}
+                updates = {key: value for key, value in payload.items() if key in allowed}
+                if not updates:
+                    raise ValueError("update has no supported fields")
+                scope = str(updates.get("scope", current["scope"]))
+                parent = updates.get("parent_goal_id", current["parent_goal_id"])
+                self._validate_goal_parent(db, goal_id, scope, parent)
+                if "title" in updates and not str(updates["title"]).strip():
+                    raise ValueError("goal title must not be empty")
+                updates["updated_at"] = now
+                columns = ",".join(f"{key}=?" for key in updates)
+                db.execute(f"UPDATE goals SET {columns} WHERE id=?", (*updates.values(), goal_id))
+                event_type = "updated"
+            elif action == "link_entry":
+                entry_id = str(payload.get("entry_id", ""))
+                relation = str(payload.get("relation", "related"))
+                entry = db.execute("SELECT status FROM entries WHERE id=?", (entry_id,)).fetchone()
+                if not entry or entry["status"] != "confirmed":
+                    raise ValueError("goal evidence must link a confirmed entry")
+                if relation not in {"progress", "blocker", "reflection", "related"}:
+                    raise ValueError("invalid goal-entry relation")
+                link_id = str(uuid.uuid4())
+                db.execute(
+                    "INSERT OR IGNORE INTO goal_entry_links(id,goal_id,entry_id,relation,evidence,created_at) VALUES(?,?,?,?,?,?)",
+                    (link_id, goal_id, entry_id, relation, str(payload.get("evidence", "")), now),
+                )
+                event_type = "entry_linked"
+            else:
+                statuses = {"complete": "completed", "pause": "paused", "abandon": "abandoned", "activate": "active"}
+                status = statuses[action]
+                db.execute("UPDATE goals SET status=?,updated_at=? WHERE id=?", (status, now, goal_id))
+                payload = {**payload, "status": status}
+                event_type = "status_changed"
+        db.execute(
+            "INSERT INTO goal_events(id,goal_id,event_type,payload_json,evidence_json,created_at) VALUES(?,?,?,?,?,?)",
+            (str(uuid.uuid4()), goal_id, event_type, _json(payload), _json(evidence), now),
+        )
+        return {"goal_id": goal_id, "event_type": event_type}
+
+    def _validate_goal_parent(self, db: sqlite3.Connection, goal_id: str, scope: str, parent_goal_id: str | None) -> None:
+        if scope not in {"life", "short_term", "weekly"}:
+            raise ValueError("invalid goal scope")
+        if scope == "life" and parent_goal_id:
+            raise ValueError("life goals cannot have a parent")
+        if not parent_goal_id:
+            return
+        if parent_goal_id == goal_id:
+            raise ValueError("a goal cannot parent itself")
+        parent = db.execute("SELECT scope,parent_goal_id FROM goals WHERE id=?", (parent_goal_id,)).fetchone()
+        if not parent:
+            raise KeyError(str(parent_goal_id))
+        rank = {"life": 0, "short_term": 1, "weekly": 2}
+        if rank[str(parent["scope"])] >= rank[scope]:
+            raise ValueError("parent goal must have a broader scope")
+        ancestor = parent
+        seen = {goal_id}
+        while ancestor:
+            ancestor_id = ancestor["parent_goal_id"]
+            if not ancestor_id:
+                break
+            if ancestor_id in seen:
+                raise ValueError("goal hierarchy cycle detected")
+            seen.add(str(ancestor_id))
+            ancestor = db.execute("SELECT scope,parent_goal_id FROM goals WHERE id=?", (ancestor_id,)).fetchone()
+
+    def _goal_record(self, db: sqlite3.Connection, row: sqlite3.Row, event_limit: int = 5, evidence_limit: int = 5) -> dict[str, Any]:
+        item = dict(row)
+        events = db.execute("SELECT event_type,payload_json,evidence_json,created_at FROM goal_events WHERE goal_id=? ORDER BY created_at DESC LIMIT ?", (row["id"], event_limit)).fetchall()
+        links = db.execute(
+            """SELECT l.entry_id,l.relation,l.evidence,l.created_at,e.entry_date,e.clean_text
+               FROM goal_entry_links l JOIN entries e ON e.id=l.entry_id
+               WHERE l.goal_id=? ORDER BY e.entry_date DESC,l.created_at DESC LIMIT ?""",
+            (row["id"], evidence_limit),
+        ).fetchall()
+        item["recent_events"] = [{**dict(event), "payload": json.loads(event["payload_json"] or "{}"), "evidence": json.loads(event["evidence_json"] or "[]")} for event in events]
+        for event in item["recent_events"]:
+            event.pop("payload_json", None)
+            event.pop("evidence_json", None)
+        item["evidence"] = [dict(link) for link in links]
+        return item
+
+    def _goal_search_text(self, goal: dict[str, Any]) -> str:
+        evidence = " ".join(str(item.get("evidence") or item.get("clean_text") or "") for item in goal.get("evidence", []))
+        return " ".join(str(goal.get(key) or "") for key in ("title", "description", "success_criteria")) + " " + evidence
+
+    def _weekly_goal_context(self, db: sqlite3.Connection, start: str, end: str) -> list[dict[str, Any]]:
+        rows = db.execute("SELECT * FROM goals WHERE status='active' ORDER BY priority DESC,scope,created_at").fetchall()
+        records = []
+        for row in rows:
+            item = dict(row)
+            evidence = db.execute(
+                """SELECT l.entry_id,l.relation,l.evidence,e.entry_date,e.clean_text
+                   FROM goal_entry_links l JOIN entries e ON e.id=l.entry_id
+                   WHERE l.goal_id=? AND e.entry_date BETWEEN ? AND ? ORDER BY e.entry_date""",
+                (row["id"], start, end),
+            ).fetchall()
+            events = db.execute("SELECT event_type,payload_json,evidence_json,created_at FROM goal_events WHERE goal_id=? AND substr(created_at,1,10) BETWEEN ? AND ? ORDER BY created_at", (row["id"], start, end)).fetchall()
+            item["weekly_evidence"] = [dict(value) for value in evidence]
+            item["weekly_events"] = [{**dict(value), "payload": json.loads(value["payload_json"] or "{}"), "evidence": json.loads(value["evidence_json"] or "[]")} for value in events]
+            for event in item["weekly_events"]:
+                event.pop("payload_json", None)
+                event.pop("evidence_json", None)
+            records.append(item)
+        return records
+
+    def _write_goals_mirror(self) -> None:
+        with self.connect() as db:
+            goals = db.execute("SELECT * FROM goals ORDER BY scope,priority DESC,created_at").fetchall()
+            events = db.execute(
+                """SELECT ge.event_type,ge.created_at,g.title,ge.payload_json
+                   FROM goal_events ge JOIN goals g ON g.id=ge.goal_id
+                   ORDER BY ge.created_at DESC LIMIT 12"""
+            ).fetchall()
+        lines = ["# Goals", "", "SQLite is the source of truth. This file is regenerated only after confirmed goal changes.", ""]
+        labels = {"life": "Life", "short_term": "Short-term", "weekly": "Weekly"}
+        for scope in ("life", "short_term", "weekly"):
+            lines.extend([f"## {labels[scope]}", ""])
+            scoped = [row for row in goals if row["scope"] == scope]
+            if not scoped:
+                lines.extend(["- None", ""])
+                continue
+            for row in scoped:
+                target = f"; target {row['target_date']}" if row["target_date"] else ""
+                parent = f"; parent `{row['parent_goal_id']}`" if row["parent_goal_id"] else ""
+                lines.append(f"- [{row['status']}] **{row['title']}** (priority {row['priority']}{target}{parent})")
+                if row["description"]:
+                    lines.append(f"  - {row['description']}")
+                if row["success_criteria"]:
+                    lines.append(f"  - Success: {row['success_criteria']}")
+            lines.append("")
+        lines.extend(["## Recent confirmed changes", ""])
+        if not events:
+            lines.append("- None")
+        else:
+            for event in events:
+                lines.append(f"- {event['created_at']}: {event['title']} — {event['event_type']}")
+        lines.append("")
+        (self.paths.memory / "goals.md").write_text("\n".join(lines), encoding="utf-8")
 
     def feedback_review_context(self, now: datetime | None = None) -> dict[str, Any]:
         moment = (now or _now()).astimezone(TZ)
@@ -567,9 +1174,14 @@ class DiaryStore:
 
     def _ensure_theme(self, db: sqlite3.Connection, name: str) -> str:
         normalized = _normalize(name)
-        row = db.execute("SELECT id FROM themes WHERE normalized_name=?", (normalized,)).fetchone()
+        row = db.execute("SELECT * FROM themes WHERE normalized_name=?", (normalized,)).fetchone()
         if row:
-            return str(row["id"])
+            if row["status"] == "inactive":
+                raise ValueError(f"inactive theme must be activated before reuse: {name}")
+            canonical = self._canonical_theme_row(db, str(row["id"]))
+            if not canonical or canonical["status"] != "active":
+                raise ValueError(f"theme does not resolve to an active theme: {name}")
+            return str(canonical["id"])
         theme_id = str(uuid.uuid4())
         now = _iso()
         db.execute("INSERT INTO themes(id,name,normalized_name,created_at,updated_at) VALUES(?,?,?,?,?)", (theme_id, name.strip(), normalized, now, now))

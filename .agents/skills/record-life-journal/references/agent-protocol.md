@@ -62,3 +62,38 @@ python .agents/skills/record-life-journal/scripts/journal.py --root . save-previ
 ```
 
 Do not include chain-of-thought or full historical records.
+
+## Theme-governance output
+
+Pass review items to `save-theme-review` before asking for decisions:
+
+```json
+[
+  {
+    "action": "deactivate|activate|rename|merge|split|create|reassign_segment",
+    "source_theme_id": "uuid or null",
+    "target_theme_id": "uuid or null",
+    "payload": {},
+    "evidence": [{"entry_id": "uuid", "segment_id": "uuid", "reason": "string"}]
+  }
+]
+```
+
+Show each proposal and its evidence. Pass only the user's per-item `approved` or `rejected` decisions to `apply-theme-changes`. A split does not imply historical reclassification.
+
+## Goal-change output
+
+Pass proposed changes to `goal-change-preview`:
+
+```json
+[
+  {
+    "action": "create|update|complete|pause|abandon|activate|link_entry",
+    "goal_id": "uuid when applicable",
+    "payload": {},
+    "evidence": [{"entry_id": "confirmed uuid", "reason": "string"}]
+  }
+]
+```
+
+`create` requires `scope` and `title`. Use `ref` and `parent_ref` for a newly proposed hierarchy in one preview. `link_entry` requires a confirmed entry plus `progress`, `blocker`, `reflection`, or `related`. Do not convert inference into a goal. Apply only explicit per-item decisions.
