@@ -1136,6 +1136,9 @@ class DiaryStore:
 
     def git_snapshot(self, message: str) -> str:
         """Commit the complete local state, including the main DB and all journals."""
+        if self.paths.db.exists():
+            with sqlite3.connect(self.paths.db) as db:
+                db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
         if not (self.paths.root / ".git").exists():
             subprocess.run(["git", "init"], cwd=self.paths.root, check=True, capture_output=True, text=True)
         identity = (

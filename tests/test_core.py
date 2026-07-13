@@ -271,6 +271,19 @@ class DiaryStoreTests(unittest.TestCase):
         self.assertIn("data/diary.sqlite3", tracked)
         self.assertIn("journals/originals/2026/07/", tracked)
         self.assertIn("journals/cleaned/2026/07/", tracked)
+        applied = self.store.mark_skill_revision(result["revision_id"], "applied", "tests passed")
+        self.assertTrue(applied["commit"])
+        with self.store.connect() as db:
+            audit = db.execute("SELECT status,git_after_commit FROM skill_revisions WHERE id=?", (result["revision_id"],)).fetchone()
+        self.assertEqual(tuple(audit), ("applied", applied["commit"]))
+        status = subprocess.run(
+            ["git", "status", "--short"],
+            cwd=self.root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        self.assertEqual(status, "")
 
 
 if __name__ == "__main__":
