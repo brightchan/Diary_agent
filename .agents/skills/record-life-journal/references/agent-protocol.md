@@ -21,13 +21,13 @@ Use this compact contract between cleaner, classifier, continuity, and orchestra
 ```json
 {
   "segments": [
-    {"text": "exact or faithful span", "theme": "string", "theme_status": "existing|proposed"}
+    {"text": "exact or faithful span", "theme": "primary theme", "tags": ["optional cross-cutting theme"], "theme_status": "existing|proposed"}
   ],
   "merge_suggestions": []
 }
 ```
 
-Preserve narrative order. Never apply `merge_suggestions` automatically.
+Preserve narrative order. `theme` is required. `tags` is optional, deduplicated, and must not repeat the primary theme. Legacy `{text, theme}` payloads remain valid. Never apply `merge_suggestions` automatically.
 
 ## Continuity output
 
@@ -57,7 +57,7 @@ Pass arrays to `save-preview` as JSON strings or files:
 python .agents/skills/record-life-journal/scripts/journal.py --root . save-preview \
   --entry-id '<uuid>' \
   --clean-text '<preview text>' \
-  --segments '[{"text":"...","theme":"..."}]' \
+  --segments '[{"text":"...","theme":"...","tags":["..."]}]' \
   --uncertainties '[]' --links '[]' --followups '[]'
 ```
 
@@ -70,7 +70,7 @@ Pass review items to `save-theme-review` before asking for decisions:
 ```json
 [
   {
-    "action": "deactivate|activate|rename|merge|split|create|reassign_segment",
+    "action": "deactivate|activate|rename|merge|split|create|reassign_segment|add_segment_tag|remove_segment_tag",
     "source_theme_id": "uuid or null",
     "target_theme_id": "uuid or null",
     "payload": {},
@@ -79,7 +79,7 @@ Pass review items to `save-theme-review` before asking for decisions:
 ]
 ```
 
-Show each proposal and its evidence. Pass only the user's per-item `approved` or `rejected` decisions to `apply-theme-changes`. A split does not imply historical reclassification.
+Show each proposal and its evidence. Pass only the user's per-item `approved` or `rejected` decisions to `apply-theme-changes`. A split does not imply historical reclassification. `reassign_segment` changes the primary theme. Tag additions and removals require their own explicit proposals and never rewrite confirmed Markdown.
 
 ## Goal-change output
 

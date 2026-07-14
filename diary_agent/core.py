@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS themes (
 
 CREATE TABLE IF NOT EXISTS theme_change_proposals (
     id TEXT PRIMARY KEY,
-    action TEXT NOT NULL CHECK(action IN ('create','activate','deactivate','rename','merge','split','reassign_segment')),
+    action TEXT NOT NULL CHECK(action IN ('create','activate','deactivate','rename','merge','split','reassign_segment','add_segment_tag','remove_segment_tag')),
     source_theme_id TEXT REFERENCES themes(id),
     target_theme_id TEXT REFERENCES themes(id),
     payload_json TEXT NOT NULL DEFAULT '{}',
@@ -74,6 +74,13 @@ CREATE TABLE IF NOT EXISTS segments (
     theme_id TEXT REFERENCES themes(id),
     theme_name TEXT NOT NULL,
     UNIQUE(entry_id, position)
+);
+
+CREATE TABLE IF NOT EXISTS segment_tags (
+    segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+    theme_id TEXT NOT NULL REFERENCES themes(id),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(segment_id, theme_id)
 );
 
 CREATE TABLE IF NOT EXISTS entry_links (
@@ -192,6 +199,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
 );
 
 CREATE INDEX IF NOT EXISTS idx_themes_status ON themes(status);
+CREATE INDEX IF NOT EXISTS idx_segment_tags_theme ON segment_tags(theme_id, segment_id);
 CREATE INDEX IF NOT EXISTS idx_theme_changes_status ON theme_change_proposals(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_goals_status_scope ON goals(status, scope, priority);
 CREATE INDEX IF NOT EXISTS idx_goal_events_goal_created ON goal_events(goal_id, created_at);
@@ -272,6 +280,8 @@ class DiaryStore:
             path.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             db.executescript(SCHEMA)
+            self._migrate_schema(db)
+            db.commit()
         memory_files = {
             "user-preferences.md": "# User Preferences\n\n",
             "workflow-feedback.md": "# Workflow Feedback\n\n",
@@ -284,6 +294,47 @@ class DiaryStore:
             if not path.exists():
                 path.write_text(content, encoding="utf-8")
         return {"root": str(self.paths.root), "database": str(self.paths.db)}
+
+    def _migrate_schema(self, db: sqlite3.Connection) -> None:
+        """Apply additive, idempotent migrations without rewriting journal files."""
+        proposal_sql = db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='theme_change_proposals'"
+        ).fetchone()
+        if proposal_sql and "add_segment_tag" not in str(proposal_sql["sql"]):
+            db.executescript(
+                """
+                CREATE TABLE theme_change_proposals_new (
+                    id TEXT PRIMARY KEY,
+                    action TEXT NOT NULL CHECK(action IN ('create','activate','deactivate','rename','merge','split','reassign_segment','add_segment_tag','remove_segment_tag')),
+                    source_theme_id TEXT REFERENCES themes(id),
+                    target_theme_id TEXT REFERENCES themes(id),
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    evidence_json TEXT NOT NULL DEFAULT '[]',
+                    status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed','approved','rejected','applied')),
+                    created_at TEXT NOT NULL,
+                    decided_at TEXT,
+                    applied_at TEXT
+                );
+                INSERT INTO theme_change_proposals_new
+                    SELECT * FROM theme_change_proposals;
+                DROP TABLE theme_change_proposals;
+                ALTER TABLE theme_change_proposals_new RENAME TO theme_change_proposals;
+                CREATE INDEX IF NOT EXISTS idx_theme_changes_status
+                    ON theme_change_proposals(status, created_at);
+                """
+            )
+        before = db.total_changes
+        db.execute(
+            """INSERT OR IGNORE INTO segment_tags(segment_id,theme_id,created_at)
+               SELECT id,theme_id,? FROM segments WHERE theme_id IS NOT NULL""",
+            (_iso(),),
+        )
+        if db.total_changes > before:
+            entry_ids = [
+                str(row[0])
+                for row in db.execute("SELECT DISTINCT entry_id FROM segments").fetchall()
+            ]
+            self._refresh_entry_fts(db, entry_ids)
 
     def connect(self) -> sqlite3.Connection:
         self.paths.db.parent.mkdir(parents=True, exist_ok=True)
@@ -374,10 +425,12 @@ class DiaryStore:
             else:
                 rows = []
             for row in rows:
-                candidates[row["id"]] = dict(row)
+                candidates[row["id"]] = {**dict(row), "_fts_match": True}
             recent = db.execute("SELECT * FROM entries WHERE status='confirmed' ORDER BY entry_date DESC, confirmed_at DESC").fetchall()
             for row in recent:
                 candidates.setdefault(row["id"], dict(row))
+            for candidate in candidates.values():
+                candidate["segments"] = self._entry_segment_records(db, str(candidate["id"]))
 
         scored = []
         for row in candidates.values():
@@ -386,7 +439,9 @@ class DiaryStore:
             days = max(0, (_now().date() - datetime.fromisoformat(row["entry_date"]).date()).days)
             recency = 1 / (1 + days / 30)
             score = semantic * 0.82 + recency * 0.18
-            if semantic > 0.04 or days <= 14:
+            if row.get("_fts_match"):
+                score = max(score, 0.35 + recency * 0.05)
+            if semantic > 0.04 or days <= 14 or row.get("_fts_match"):
                 scored.append((score, row, text))
         scored.sort(key=lambda item: item[0], reverse=True)
 
@@ -405,7 +460,16 @@ class DiaryStore:
                 if remaining < 160:
                     break
                 snippet = snippet[:remaining]
-            selected.append({"entry_id": row["id"], "date": row["entry_date"], "type": row["entry_type"], "score": round(score, 4), "text": snippet})
+            selected.append(
+                {
+                    "entry_id": row["id"],
+                    "date": row["entry_date"],
+                    "type": row["entry_type"],
+                    "score": round(score, 4),
+                    "text": snippet,
+                    "segments": row.get("segments", []),
+                }
+            )
             used += len(snippet)
             covered.update(novelty_terms)
             previous_score = score
@@ -424,7 +488,18 @@ class DiaryStore:
             theme = str(segment.get("theme", "")).strip()
             if not text or not theme:
                 raise ValueError("each segment requires text and theme")
-            normalized_segments.append({"position": position, "text": text, "theme": theme})
+            raw_tags = segment.get("tags") or []
+            if not isinstance(raw_tags, (list, tuple)):
+                raise ValueError("segment tags must be a list")
+            tags = []
+            seen = {_normalize(theme)}
+            for value in raw_tags:
+                tag = str(value).strip()
+                normalized = _normalize(tag)
+                if tag and normalized not in seen:
+                    tags.append(tag)
+                    seen.add(normalized)
+            normalized_segments.append({"position": position, "text": text, "theme": theme, "tags": tags})
         preview = {
             "clean_text": clean,
             "segments": normalized_segments,
@@ -463,12 +538,31 @@ class DiaryStore:
                 if not theme or theme["status"] != "active":
                     raise ValueError(f"theme is not active: {segment['theme']}")
                 theme_name = str(theme["name"])
-                theme_names.append(theme_name)
-                stored_segments.append({**segment, "theme": theme_name})
+                if theme_name not in theme_names:
+                    theme_names.append(theme_name)
+                tag_rows = []
+                seen_theme_ids = {str(theme["id"])}
+                for tag_name in segment.get("tags") or []:
+                    tag_id = self._ensure_theme(db, str(tag_name))
+                    tag = self._canonical_theme_row(db, tag_id)
+                    if not tag or tag["status"] != "active":
+                        raise ValueError(f"tag is not active: {tag_name}")
+                    if str(tag["id"]) not in seen_theme_ids:
+                        tag_rows.append(tag)
+                        seen_theme_ids.add(str(tag["id"]))
+                        if str(tag["name"]) not in theme_names:
+                            theme_names.append(str(tag["name"]))
+                stored_segments.append({**segment, "theme": theme_name, "tags": [str(tag["name"]) for tag in tag_rows]})
+                segment_id = str(uuid.uuid4())
                 db.execute(
                     "INSERT INTO segments(id,entry_id,position,text,theme_id,theme_name) VALUES(?,?,?,?,?,?)",
-                    (str(uuid.uuid4()), entry_id, segment["position"], segment["text"], theme["id"], theme_name),
+                    (segment_id, entry_id, segment["position"], segment["text"], theme["id"], theme_name),
                 )
+                for tagged_theme_id in seen_theme_ids:
+                    db.execute(
+                        "INSERT INTO segment_tags(segment_id,theme_id,created_at) VALUES(?,?,?)",
+                        (segment_id, tagged_theme_id, _iso()),
+                    )
             for link in preview.get("links", []):
                 target = str(link.get("target_entry_id", ""))
                 if target and db.execute("SELECT 1 FROM entries WHERE id=?", (target,)).fetchone():
@@ -535,16 +629,195 @@ class DiaryStore:
             ).fetchall()
             records = []
             for row in rows:
-                preview = json.loads(row["preview_json"] or "{}")
-                records.append({"entry_id": row["id"], "date": row["entry_date"], "clean_text": row["clean_text"], "segments": preview.get("segments", [])})
+                records.append(
+                    {
+                        "entry_id": row["id"],
+                        "date": row["entry_date"],
+                        "clean_text": row["clean_text"],
+                        "segments": self._entry_segment_records(db, str(row["id"])),
+                    }
+                )
             goals = self._weekly_goal_context(db, start.isoformat(), end.isoformat())
+            historical = self._weekly_historical_context(db, start.isoformat(), end.isoformat(), records, goals)
         return {
             "period_start": start.isoformat(),
             "period_end": end.isoformat(),
             "has_content": bool(records),
             "entries": records,
             "goals": goals,
+            "historical_connections": historical["connections"],
+            "historical_query_signals": historical["query_signals"],
+            "reflection_prompt_candidate": historical["reflection_prompt_candidate"],
             "theme_review": self.theme_review_context(moment),
+        }
+
+    def _weekly_historical_context(
+        self,
+        db: sqlite3.Connection,
+        start: str,
+        end: str,
+        current_entries: list[dict[str, Any]],
+        goals: list[dict[str, Any]],
+        token_budget: int = 900,
+    ) -> dict[str, Any]:
+        if not current_entries:
+            return {"connections": [], "query_signals": {"themes": [], "terms": []}, "reflection_prompt_candidate": None}
+        current_entry_ids = {str(item["entry_id"]) for item in current_entries}
+        current_text = " ".join(str(item.get("clean_text") or "") for item in current_entries)
+        goal_parts = []
+        for item in goals:
+            goal_parts.extend(str(item.get(key) or "") for key in ("title", "description", "success_criteria"))
+            for evidence in item.get("weekly_evidence", []):
+                goal_parts.extend([str(evidence.get("evidence") or ""), str(evidence.get("clean_text") or "")])
+            for event in item.get("weekly_events", []):
+                goal_parts.extend([_json(event.get("payload") or {}), _json(event.get("evidence") or [])])
+        goal_text = " ".join(goal_parts)
+        current_theme_ids: set[str] = set()
+        current_theme_names: list[str] = []
+        tagged = db.execute(
+            """SELECT DISTINCT st.theme_id FROM segment_tags st
+               JOIN segments s ON s.id=st.segment_id JOIN entries e ON e.id=s.entry_id
+               WHERE e.status='confirmed' AND e.entry_date BETWEEN ? AND ?""",
+            (start, end),
+        ).fetchall()
+        for row in tagged:
+            theme = self._canonical_theme_row(db, str(row["theme_id"]))
+            if theme and theme["status"] == "active":
+                current_theme_ids.add(str(theme["id"]))
+                if str(theme["name"]) not in current_theme_names:
+                    current_theme_names.append(str(theme["name"]))
+        raw_terms = re.findall(r"[A-Za-z0-9_]{3,}|[\u4e00-\u9fff]{2,8}", f"{current_text} {goal_text}")
+        terms = []
+        for term in raw_terms:
+            normalized = _normalize(term)
+            if normalized and normalized not in {_normalize(value) for value in terms}:
+                terms.append(term)
+            if len(terms) >= 16:
+                break
+        fts_entry_ids: set[str] = set()
+        fts_terms = [*current_theme_names, *terms][:12]
+        if fts_terms:
+            fts_query = " OR ".join(f'"{term.replace(chr(34), "")}"' for term in fts_terms)
+            try:
+                fts_entry_ids = {
+                    str(row[0])
+                    for row in db.execute(
+                        """SELECT entry_id FROM entries_fts
+                           JOIN entries e ON e.id=entries_fts.entry_id
+                           WHERE entries_fts MATCH ? AND e.status='confirmed'
+                           AND e.entry_type!='weekly' AND e.entry_date<?""",
+                        (fts_query, start),
+                    ).fetchall()
+                }
+            except sqlite3.OperationalError:
+                fts_entry_ids = set()
+        linked_entry_ids: set[str] = set()
+        if current_entry_ids:
+            placeholders = ",".join("?" for _ in current_entry_ids)
+            link_rows = db.execute(
+                f"""SELECT source_entry_id,target_entry_id FROM entry_links
+                    WHERE source_entry_id IN ({placeholders}) OR target_entry_id IN ({placeholders})""",
+                (*current_entry_ids, *current_entry_ids),
+            ).fetchall()
+            for link in link_rows:
+                for linked_id in (str(link["source_entry_id"]), str(link["target_entry_id"])):
+                    if linked_id not in current_entry_ids:
+                        linked_entry_ids.add(linked_id)
+        query_vector = _ngrams(" ".join([current_text, goal_text, *current_theme_names]))
+        candidates = []
+        rows = db.execute(
+            """SELECT s.*,e.entry_date,e.clean_text FROM segments s
+               JOIN entries e ON e.id=s.entry_id
+               WHERE e.status='confirmed' AND e.entry_type!='weekly' AND e.entry_date<?
+               ORDER BY e.entry_date DESC,s.position""",
+            (start,),
+        ).fetchall()
+        start_date = datetime.fromisoformat(start).date()
+        for row in rows:
+            candidate_theme_ids: set[str] = set()
+            candidate_theme_names: list[str] = []
+            for tagged_row in db.execute("SELECT theme_id FROM segment_tags WHERE segment_id=?", (row["id"],)).fetchall():
+                theme = self._canonical_theme_row(db, str(tagged_row["theme_id"]))
+                if theme and theme["status"] == "active":
+                    candidate_theme_ids.add(str(theme["id"]))
+                    if str(theme["name"]) not in candidate_theme_names:
+                        candidate_theme_names.append(str(theme["name"]))
+            overlap_ids = current_theme_ids & candidate_theme_ids
+            semantic = _cosine(query_vector, _ngrams(str(row["text"])))
+            fts_match = str(row["entry_id"]) in fts_entry_ids
+            linked = str(row["entry_id"]) in linked_entry_ids
+            if not (overlap_ids or linked or (fts_match and semantic >= 0.10) or semantic >= 0.22):
+                continue
+            days = max(1, (start_date - datetime.fromisoformat(str(row["entry_date"])).date()).days)
+            recency = 1 / (1 + days / 90)
+            overlap = len(overlap_ids) / max(1, len(current_theme_ids))
+            score = semantic * 0.55 + overlap * 0.30 + (0.10 if linked else 0.0) + recency * 0.05
+            reasons = []
+            if overlap_ids:
+                shared_names = [
+                    name
+                    for name in candidate_theme_names
+                    if any(
+                        theme_id in overlap_ids
+                        and (theme := self._canonical_theme_row(db, theme_id)) is not None
+                        and str(theme["name"]) == name
+                        for theme_id in overlap_ids
+                    )
+                ]
+                reasons.append({"kind": "shared_themes", "values": shared_names})
+            if fts_match:
+                reasons.append({"kind": "fts_term_match"})
+            if semantic >= 0.10:
+                reasons.append({"kind": "ngram_similarity", "score": round(semantic, 4)})
+            if linked:
+                reasons.append({"kind": "entry_link"})
+            segment_record = self._entry_segment_records(db, str(row["entry_id"]))
+            record = next((item for item in segment_record if item["segment_id"] == row["id"]), None)
+            if not record:
+                continue
+            candidates.append(
+                {
+                    "entry_id": row["entry_id"],
+                    "segment_id": row["id"],
+                    "date": row["entry_date"],
+                    "text": row["text"],
+                    "theme": record["theme"],
+                    "tags": record["tags"],
+                    "score": round(score, 4),
+                    "semantic_score": round(semantic, 4),
+                    "evidence_reasons": reasons,
+                }
+            )
+        candidates.sort(key=lambda item: (item["score"], item["date"], item["segment_id"]), reverse=True)
+        selected = []
+        used = 0
+        char_budget = max(600, token_budget * 2)
+        for candidate in candidates:
+            if any(_cosine(_ngrams(candidate["text"]), _ngrams(item["text"])) >= 0.92 for item in selected):
+                continue
+            size = len(candidate["text"]) + len(_json(candidate["evidence_reasons"])) + 80
+            if selected and used + size > char_budget:
+                break
+            selected.append(candidate)
+            used += size
+            if used >= char_budget:
+                break
+        prompt_candidate = None
+        if selected:
+            top = selected[0]
+            reason_kinds = {item["kind"] for item in top["evidence_reasons"]}
+            if top["score"] >= 0.32 and top["semantic_score"] >= 0.10 and reason_kinds & {"shared_themes", "entry_link"}:
+                prompt_candidate = {
+                    "current_period": {"start": start, "end": end},
+                    "historical_entry_id": top["entry_id"],
+                    "historical_segment_id": top["segment_id"],
+                    "reason": "strong evidence of a related pattern or unfinished thread",
+                    "suggested_focus": "pattern_change_blocker_or_unfinished_thread",
+                }
+        return {
+            "connections": selected,
+            "query_signals": {"themes": current_theme_names, "terms": terms},
+            "reflection_prompt_candidate": prompt_candidate,
         }
 
     def theme_review_context(self, now: datetime | None = None) -> dict[str, Any]:
@@ -553,10 +826,11 @@ class DiaryStore:
         recent_start = (moment.date() - timedelta(days=90)).isoformat()
         with self.connect() as db:
             rows = db.execute(
-                """SELECT t.*, COUNT(s.id) AS total_uses,
+                """SELECT t.*, COUNT(st.segment_id) AS total_uses,
                    SUM(CASE WHEN e.entry_date>=? THEN 1 ELSE 0 END) AS recent_uses
                    FROM themes t
-                   LEFT JOIN segments s ON s.theme_id=t.id
+                   LEFT JOIN segment_tags st ON st.theme_id=t.id
+                   LEFT JOIN segments s ON s.id=st.segment_id
                    LEFT JOIN entries e ON e.id=s.entry_id AND e.status='confirmed'
                    GROUP BY t.id ORDER BY t.status, total_uses DESC, t.name""",
                 (recent_start,),
@@ -566,8 +840,9 @@ class DiaryStore:
                 item = dict(row)
                 representatives = db.execute(
                     """SELECT s.id AS segment_id,s.entry_id,e.entry_date,s.text
-                       FROM segments s JOIN entries e ON e.id=s.entry_id
-                       WHERE s.theme_id=? AND e.status='confirmed'
+                       FROM segment_tags st JOIN segments s ON s.id=st.segment_id
+                       JOIN entries e ON e.id=s.entry_id
+                       WHERE st.theme_id=? AND e.status='confirmed'
                        ORDER BY e.entry_date DESC,s.position LIMIT 3""",
                     (row["id"],),
                 ).fetchall()
@@ -603,7 +878,7 @@ class DiaryStore:
 
     def save_theme_review(self, changes: list[dict[str, Any]]) -> dict[str, Any]:
         self.initialize()
-        allowed = {"create", "activate", "deactivate", "rename", "merge", "split", "reassign_segment"}
+        allowed = {"create", "activate", "deactivate", "rename", "merge", "split", "reassign_segment", "add_segment_tag", "remove_segment_tag"}
         if not changes:
             raise ValueError("changes must not be empty")
         created = []
@@ -616,10 +891,16 @@ class DiaryStore:
                 target = change.get("target_theme_id")
                 payload = dict(change.get("payload") or {})
                 evidence = change.get("evidence") or []
-                if action not in {"create", "reassign_segment"} and not source:
+                if action not in {"create", "reassign_segment", "add_segment_tag"} and not source:
                     raise ValueError(f"{action} requires source_theme_id")
                 if action == "merge" and not target:
                     raise ValueError("merge requires target_theme_id")
+                if action == "add_segment_tag" and not (target or payload.get("target_theme_id")):
+                    raise ValueError("add_segment_tag requires target_theme_id")
+                if action in {"reassign_segment", "add_segment_tag", "remove_segment_tag"}:
+                    segment_id = str(payload.get("segment_id", ""))
+                    if not segment_id or not db.execute("SELECT 1 FROM segments WHERE id=?", (segment_id,)).fetchone():
+                        raise KeyError(segment_id)
                 if source and not db.execute("SELECT 1 FROM themes WHERE id=?", (source,)).fetchone():
                     raise KeyError(str(source))
                 if target and not db.execute("SELECT 1 FROM themes WHERE id=?", (target,)).fetchone():
@@ -814,6 +1095,13 @@ class DiaryStore:
         affected_entries: set[str] = set()
         if source_id:
             affected_entries.update(value[0] for value in db.execute("SELECT DISTINCT entry_id FROM segments WHERE theme_id=?", (source_id,)).fetchall())
+            affected_entries.update(
+                value[0]
+                for value in db.execute(
+                    "SELECT DISTINCT s.entry_id FROM segment_tags st JOIN segments s ON s.id=st.segment_id WHERE st.theme_id=?",
+                    (source_id,),
+                ).fetchall()
+            )
         if action == "create":
             created = self._create_theme(db, payload)
             return {"theme_ids": [created["id"]]}
@@ -826,9 +1114,44 @@ class DiaryStore:
             target = self._canonical_theme_row(db, str(chosen_target)) if chosen_target else None
             if not target or target["status"] != "active":
                 raise ValueError("reassign_segment requires an active target theme")
+            db.execute("DELETE FROM segment_tags WHERE segment_id=? AND theme_id=?", (segment_id, segment["theme_id"]))
             db.execute("UPDATE segments SET theme_id=?,theme_name=? WHERE id=?", (target["id"], target["name"], segment_id))
+            db.execute(
+                "INSERT OR IGNORE INTO segment_tags(segment_id,theme_id,created_at) VALUES(?,?,?)",
+                (segment_id, target["id"], _iso()),
+            )
             self._refresh_entry_fts(db, {str(segment["entry_id"])})
             return {"segment_id": segment_id, "theme_ids": [target["id"]]}
+        if action in {"add_segment_tag", "remove_segment_tag"}:
+            segment_id = str(payload.get("segment_id", ""))
+            segment = db.execute("SELECT * FROM segments WHERE id=?", (segment_id,)).fetchone()
+            if not segment:
+                raise KeyError(segment_id)
+            if action == "add_segment_tag":
+                requested_id = target_id or payload.get("target_theme_id")
+            else:
+                requested_id = source_id or payload.get("source_theme_id")
+            requested = db.execute("SELECT * FROM themes WHERE id=?", (requested_id,)).fetchone() if requested_id else None
+            canonical = self._canonical_theme_row(db, str(requested_id)) if requested_id else None
+            if not requested or not canonical:
+                raise KeyError(str(requested_id))
+            if action == "add_segment_tag":
+                if canonical["status"] != "active":
+                    raise ValueError("add_segment_tag requires an active target theme")
+                db.execute(
+                    "INSERT OR IGNORE INTO segment_tags(segment_id,theme_id,created_at) VALUES(?,?,?)",
+                    (segment_id, canonical["id"], _iso()),
+                )
+            else:
+                primary = self._canonical_theme_row(db, str(segment["theme_id"])) if segment["theme_id"] else None
+                if primary and primary["id"] == canonical["id"]:
+                    raise ValueError("remove_segment_tag cannot remove the primary theme")
+                db.execute(
+                    "DELETE FROM segment_tags WHERE segment_id=? AND theme_id IN (?,?)",
+                    (segment_id, requested["id"], canonical["id"]),
+                )
+            self._refresh_entry_fts(db, {str(segment["entry_id"])})
+            return {"segment_id": segment_id, "theme_ids": [str(canonical["id"])]}
         source = db.execute("SELECT * FROM themes WHERE id=?", (source_id,)).fetchone()
         if not source:
             raise KeyError(str(source_id))
@@ -892,16 +1215,43 @@ class DiaryStore:
             current = db.execute("SELECT * FROM themes WHERE id=?", (current["merged_into"],)).fetchone()
         return current
 
+    def _entry_segment_records(self, db: sqlite3.Connection, entry_id: str) -> list[dict[str, Any]]:
+        records = []
+        rows = db.execute("SELECT * FROM segments WHERE entry_id=? ORDER BY position", (entry_id,)).fetchall()
+        for row in rows:
+            primary = self._canonical_theme_row(db, str(row["theme_id"])) if row["theme_id"] else None
+            primary_name = str(primary["name"]) if primary and primary["status"] == "active" else str(row["theme_name"])
+            tags = []
+            for tagged in db.execute("SELECT theme_id FROM segment_tags WHERE segment_id=?", (row["id"],)).fetchall():
+                theme = self._canonical_theme_row(db, str(tagged["theme_id"]))
+                if theme and theme["status"] == "active" and str(theme["name"]) != primary_name and str(theme["name"]) not in tags:
+                    tags.append(str(theme["name"]))
+            tags.sort(key=_normalize)
+            records.append(
+                {
+                    "segment_id": row["id"],
+                    "position": row["position"],
+                    "text": row["text"],
+                    "theme": primary_name,
+                    "tags": tags,
+                }
+            )
+        return records
+
     def _refresh_entry_fts(self, db: sqlite3.Connection, entry_ids: Iterable[str]) -> None:
         for entry_id in set(entry_ids):
             entry = db.execute("SELECT clean_text,status FROM entries WHERE id=?", (entry_id,)).fetchone()
             if not entry or entry["status"] != "confirmed":
                 continue
             names = []
-            for segment in db.execute("SELECT theme_id FROM segments WHERE entry_id=? ORDER BY position", (entry_id,)).fetchall():
-                if not segment["theme_id"]:
-                    continue
-                theme = self._canonical_theme_row(db, str(segment["theme_id"]))
+            tagged_themes = db.execute(
+                """SELECT st.theme_id FROM segment_tags st
+                   JOIN segments s ON s.id=st.segment_id
+                   WHERE s.entry_id=? ORDER BY s.position,st.created_at""",
+                (entry_id,),
+            ).fetchall()
+            for tagged in tagged_themes:
+                theme = self._canonical_theme_row(db, str(tagged["theme_id"]))
                 if theme and theme["status"] == "active" and theme["name"] not in names:
                     names.append(str(theme["name"]))
             db.execute("DELETE FROM entries_fts WHERE entry_id=?", (entry_id,))
@@ -1208,7 +1558,11 @@ class DiaryStore:
         )
 
     def _write_clean(self, path: Path, entry: dict[str, Any], preview: dict[str, Any]) -> None:
-        theme_names = [segment["theme"] for segment in preview.get("segments", [])]
+        theme_names = []
+        for segment in preview.get("segments", []):
+            for name in [segment["theme"], *(segment.get("tags") or [])]:
+                if name not in theme_names:
+                    theme_names.append(name)
         lines = [
             "---",
             f"id: {entry['id']}",
@@ -1227,7 +1581,10 @@ class DiaryStore:
             "",
         ]
         for segment in preview.get("segments", []):
-            lines.extend([f"### {segment['theme']}", "", segment["text"], ""])
+            lines.extend([f"### {segment['theme']}", ""])
+            if segment.get("tags"):
+                lines.extend([f"Tags: {', '.join(segment['tags'])}", ""])
+            lines.extend([segment["text"], ""])
         if preview.get("followups"):
             lines.extend(["## 反思问题", ""])
             lines.extend(f"- {item['question']}" for item in preview["followups"] if item.get("question"))

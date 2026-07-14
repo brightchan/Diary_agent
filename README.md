@@ -1,6 +1,6 @@
 # Diary Agent
 
-A local-first Codex Skill for capturing spoken or typed personal journals, cleaning them conservatively, classifying evolving themes, connecting prior experiences, governing confirmed goals, asking optional follow-up questions, and storing confirmed records in SQLite plus Markdown.
+A local-first Codex Skill for capturing spoken or typed personal journals, cleaning them conservatively, assigning primary themes and cross-cutting tags, connecting prior experiences, governing confirmed goals, asking optional follow-up questions, and storing confirmed records in SQLite plus Markdown.
 
 ## Initialize
 
@@ -9,6 +9,8 @@ python -m diary_agent.cli --root . init
 ```
 
 Invoke `$record-life-journal` from a Codex task opened on this folder. The Skill stores verbatim drafts immediately, shows a cleaned and classified preview, and only finalizes an entry after confirmation.
+
+A clear standalone statement about the user's personal experience, feeling, reflection, decision, or life status enters this same draft/preview workflow by default. Direct questions, repository/task commands, and clearly non-diary requests do not.
 
 ## Schedules
 
@@ -32,6 +34,6 @@ python -m diary_agent.cli --root . goal-context
 python -m diary_agent.cli --root . conversation-context --query 'current question'
 ```
 
-Active themes are classification and theme-search candidates. Inactive themes keep all historical segments but are excluded from those defaults; entry full text remains searchable. Merged themes resolve to an Active canonical theme. Theme governance never silently rewrites confirmed Markdown.
+Each segment keeps one primary theme and may have multiple deduplicated tags. Active canonical primary themes and tags are searchable. Inactive themes keep all historical membership but are excluded from theme-driven search; entry full text remains searchable. Merged themes resolve to an Active canonical theme. Theme governance supports separately confirmed primary-theme reassignment and tag mutations, and never silently rewrites confirmed Markdown.
 
-SQLite is authoritative for life, short-term, and weekly goals. `memory/goals.md` is regenerated only after confirmed goal changes. Weekly context includes compact goal evidence and theme-review evidence, while applying those changes remains a separate confirmation step.
+SQLite is authoritative for life, short-term, and weekly goals. `memory/goals.md` is regenerated only after confirmed goal changes. Weekly context includes compact goal evidence, theme-review evidence, and a bounded set of evidence-scored older related segments. An optional historical reflection prompt is considered only when that evidence is strong enough, while applying governance changes remains a separate confirmation step.

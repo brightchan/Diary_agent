@@ -1,11 +1,17 @@
 ---
 name: record-life-journal
-description: Capture, clean, classify, connect, review, confirm, search, and summarize personal diary entries; govern themes and confirmed life, short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences, workflow feedback, or diary skill improvements.
+description: Capture clear personal-life statements by default; clean, classify, tag, connect, review, confirm, search, and summarize diary entries; govern themes and confirmed life, short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, standalone personal experiences or reflections, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences, workflow feedback, or diary skill improvements.
 ---
 
 # Record Life Journal
 
 Keep the user's wording and facts authoritative. Use Codex agents only; never request, read, or call an OpenAI API key.
+
+## Default personal-life capture
+
+Treat an unqualified declarative message about the user's own experience, feeling, reflection, decision, or life status as a diary entry even when the user does not say “record this.” Do not default to diary capture for a direct question, repository or task command, request for information or content, or other clearly non-diary message. When the distinction is genuinely unclear, continue the conversation instead of silently capturing it.
+
+The broader trigger does not change the safety boundary: preserve the verbatim message in a draft first, show a preview, and require explicit confirmation before final storage.
 
 ## Start every capture safely
 
@@ -42,7 +48,7 @@ python .agents/skills/record-life-journal/scripts/journal.py --root . local-clea
 
 ## Classify and connect
 
-- Preserve one complete narrative and represent multiple ideas as ordered segments.
+- Preserve one complete narrative and represent multiple ideas as ordered segments. Give each segment one primary `theme` and optional cross-cutting `tags`; deduplicate tags and omit the primary theme from `tags`.
 - Reuse an Active theme when evidence supports it. Exclude Inactive and Merged themes from new classification candidates; resolve a Merged name to its Active canonical target.
 - Mark a proposed new theme in the preview.
 - Never merge themes without explicit confirmation.
@@ -75,16 +81,18 @@ At Monday 01:00 Asia/Singapore:
 1. Run `weekly-context`.
 2. Exit without an agent call when `has_content` is false.
 3. When content exists, create a weekly draft covering the returned period.
-4. Summarize facts, feelings/insights, theme progress, goal progress and blockers, unfinished threads, and next-week actions.
-5. Include goal-adjustment drafts and theme-governance suggestions as separate review items. Never apply them through weekly-journal confirmation.
-6. Add 2-5 optional questions and wait for confirmation before final storage.
+4. Use `historical_connections` when present to summarize evidence-backed patterns, changes, repeated blockers, and unfinished threads across weeks. Never imply a connection that the returned evidence does not support.
+5. Summarize facts, feelings/insights, theme and tag progress, goal progress and blockers, unfinished threads, and next-week actions.
+6. Ask an optional historical reflection question only when `reflection_prompt_candidate` is present and its cited historical segment supports the question.
+7. Include goal-adjustment drafts and theme-governance suggestions as separate review items. Never apply them through weekly-journal confirmation.
+8. Add 2-5 optional questions and wait for confirmation before final storage.
 
 ## Govern themes and goals
 
 Read [agent-protocol.md](references/agent-protocol.md) before preparing change payloads.
 
 - Run `theme-review-context` for Active, Inactive, and Merged themes plus compact usage evidence. Save suggestions with `save-theme-review`; apply only explicit per-item decisions through `apply-theme-changes`.
-- Support `create`, `activate`, `deactivate`, `rename`, `merge`, `split`, and explicit `reassign_segment`. Split creates Active replacements and deactivates the source; it never rewrites historical segments unless a separate reassign proposal is approved.
+- Support `create`, `activate`, `deactivate`, `rename`, `merge`, `split`, explicit primary-theme `reassign_segment`, and explicit `add_segment_tag` or `remove_segment_tag`. Split creates Active replacements and deactivates the source; it never rewrites historical segments unless a separate proposal is approved.
 - Keep Inactive theme text searchable through entry full text, but exclude its tag from default theme-driven retrieval. Keep Merged history and resolve it to the canonical Active theme.
 - Save goal proposals with `goal-change-preview`; apply only explicit per-item decisions through `apply-goal-changes`. Never infer an old diary statement into a user goal.
 - Use `goal-context` for goal review. Use `conversation-context` to retrieve only relevant Active goals, recent events, and a small evidence set for a current question.

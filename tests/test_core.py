@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -19,12 +20,12 @@ class DiaryStoreTests(unittest.TestCase):
     def tearDown(self):
         self.tempdir.cleanup()
 
-    def confirm_entry(self, text: str, date: str, theme: str = "生活") -> str:
+    def confirm_entry(self, text: str, date: str, theme: str = "生活", tags: list[str] | None = None) -> str:
         draft = self.store.create_draft(text, entry_date=date)
         self.store.save_preview(
             draft["entry_id"],
             text,
-            [{"text": text, "theme": theme}],
+            [{"text": text, "theme": theme, "tags": tags or []}],
         )
         self.store.confirm(draft["entry_id"])
         return draft["entry_id"]
@@ -69,6 +70,32 @@ class DiaryStoreTests(unittest.TestCase):
         self.assertLessEqual(sum(len(item["text"]) for item in small), 600)
         self.assertTrue(all("score" in item for item in large))
 
+    def test_legacy_preview_and_multi_tag_search_and_markdown(self):
+        legacy = self.store.create_draft("旧格式仍然有效。", entry_date="2026-05-01")
+        preview = self.store.save_preview(legacy["entry_id"], "旧格式仍然有效。", [{"text": "旧格式仍然有效。", "theme": "系统"}])
+        self.assertEqual(preview["preview"]["segments"][0]["tags"], [])
+        self.store.confirm(legacy["entry_id"])
+
+        draft = self.store.create_draft("今天慢跑三公里。", entry_date="2026-05-02")
+        preview = self.store.save_preview(
+            draft["entry_id"],
+            "今天慢跑三公里。",
+            [{"text": "今天慢跑三公里。", "theme": "运动", "tags": ["健康", "运动", "身心", "健康"]}],
+        )
+        self.assertEqual(preview["preview"]["segments"][0]["tags"], ["健康", "身心"])
+        result = self.store.confirm(draft["entry_id"])
+        with self.store.connect() as db:
+            segment = db.execute("SELECT id FROM segments WHERE entry_id=?", (draft["entry_id"],)).fetchone()
+            self.assertEqual(db.execute("SELECT count(*) FROM segment_tags WHERE segment_id=?", (segment["id"],)).fetchone()[0], 3)
+        for query in ("运动", "健康", "身心"):
+            matches = self.store.search(query, token_budget=500)
+            match = next(item for item in matches if item["entry_id"] == draft["entry_id"])
+            self.assertEqual(match["segments"][0]["theme"], "运动")
+            self.assertEqual(match["segments"][0]["tags"], ["健康", "身心"])
+        markdown = Path(result["clean_path"]).read_text(encoding="utf-8")
+        self.assertIn("  - 健康", markdown)
+        self.assertIn("Tags: 健康, 身心", markdown)
+
     def test_weekly_context_skips_empty_and_uses_previous_week(self):
         self.store.initialize()
         now = datetime(2026, 7, 13, 1, 0, tzinfo=TZ)
@@ -78,6 +105,28 @@ class DiaryStoreTests(unittest.TestCase):
         self.assertEqual(context["period_start"], "2026-07-06")
         self.assertEqual(context["period_end"], "2026-07-12")
         self.assertEqual(len(context["entries"]), 1)
+
+    def test_weekly_context_retrieves_bounded_older_segments_and_avoids_false_prompt(self):
+        older = self.confirm_entry("跑步时总是呼吸急促，还没解决。", "2026-06-20", "运动", ["健康"])
+        current = self.confirm_entry("本周跑步时仍然呼吸急促，计划调整节奏。", "2026-07-10", "运动", ["健康"])
+        context = self.store.weekly_context(datetime(2026, 7, 13, 1, 0, tzinfo=TZ))
+        self.assertTrue(context["historical_connections"])
+        self.assertEqual(context["historical_connections"][0]["entry_id"], older)
+        self.assertNotIn(current, {item["entry_id"] for item in context["historical_connections"]})
+        self.assertTrue(context["historical_connections"][0]["evidence_reasons"])
+        self.assertLessEqual(sum(len(item["text"]) for item in context["historical_connections"]), 1800)
+        self.assertIsNotNone(context["reflection_prompt_candidate"])
+
+        isolated = DiaryStore(self.root / "isolated")
+        old_draft = isolated.create_draft("去年学习了水彩构图。", entry_date="2026-06-01")
+        isolated.save_preview(old_draft["entry_id"], "去年学习了水彩构图。", [{"text": "去年学习了水彩构图。", "theme": "艺术"}])
+        isolated.confirm(old_draft["entry_id"])
+        new_draft = isolated.create_draft("本周服务器完成了备份。", entry_date="2026-07-10")
+        isolated.save_preview(new_draft["entry_id"], "本周服务器完成了备份。", [{"text": "本周服务器完成了备份。", "theme": "系统"}])
+        isolated.confirm(new_draft["entry_id"])
+        unrelated = isolated.weekly_context(datetime(2026, 7, 13, 1, 0, tzinfo=TZ))
+        self.assertEqual(unrelated["historical_connections"], [])
+        self.assertIsNone(unrelated["reflection_prompt_candidate"])
 
     def test_feedback_and_backup(self):
         feedback = self.store.add_feedback("主题预览太长", "inconvenience")
@@ -137,6 +186,64 @@ class DiaryStoreTests(unittest.TestCase):
         self.assertEqual(original_path.read_bytes(), original_bytes)
         self.assertEqual(clean_path.read_bytes(), clean_bytes)
 
+    def test_tag_governance_uses_confirmation_and_canonical_active_names(self):
+        entry_id = self.confirm_entry("晚饭后慢跑。", "2026-04-01", "生活", ["运动"])
+        original = next((self.root / "journals" / "originals").rglob(f"*{entry_id}.md"))
+        cleaned = next((self.root / "journals" / "cleaned").rglob(f"*{entry_id}.md"))
+        journal_bytes = (original.read_bytes(), cleaned.read_bytes())
+        with self.store.connect() as db:
+            segment = db.execute("SELECT * FROM segments WHERE entry_id=?", (entry_id,)).fetchone()
+            exercise = db.execute("SELECT * FROM themes WHERE name='运动'").fetchone()
+
+        deactivate = self.store.save_theme_review([{"action": "deactivate", "source_theme_id": exercise["id"]}])
+        self.store.apply_theme_changes([{"proposal_id": deactivate["proposals"][0]["proposal_id"], "decision": "approved"}])
+        with self.store.connect() as db:
+            self.assertNotIn("运动", db.execute("SELECT themes FROM entries_fts WHERE entry_id=?", (entry_id,)).fetchone()[0])
+        blocked = self.store.create_draft("尝试复用停用标签。", entry_date="2026-04-02")
+        self.store.save_preview(blocked["entry_id"], "尝试复用停用标签。", [{"text": "尝试复用停用标签。", "theme": "生活", "tags": ["运动"]}])
+        with self.assertRaises(ValueError):
+            self.store.confirm(blocked["entry_id"])
+
+        activate = self.store.save_theme_review([{"action": "activate", "source_theme_id": exercise["id"]}])
+        self.store.apply_theme_changes([{"proposal_id": activate["proposals"][0]["proposal_id"], "decision": "approved"}])
+        create = self.store.save_theme_review([{"action": "create", "payload": {"name": "健身"}}])
+        created = self.store.apply_theme_changes([{"proposal_id": create["proposals"][0]["proposal_id"], "decision": "approved"}])
+        fitness_id = created["results"][0]["theme_ids"][0]
+        merge = self.store.save_theme_review([{"action": "merge", "source_theme_id": exercise["id"], "target_theme_id": fitness_id}])
+        self.store.apply_theme_changes([{"proposal_id": merge["proposals"][0]["proposal_id"], "decision": "approved"}])
+        with self.store.connect() as db:
+            self.assertIn("健身", db.execute("SELECT themes FROM entries_fts WHERE entry_id=?", (entry_id,)).fetchone()[0])
+        canonical_tag_entry = self.confirm_entry("继续锻炼。", "2026-04-03", "生活", ["运动"])
+        with self.store.connect() as db:
+            canonical_preview = json.loads(db.execute("SELECT preview_json FROM entries WHERE id=?", (canonical_tag_entry,)).fetchone()[0])
+        self.assertEqual(canonical_preview["segments"][0]["tags"], ["健身"])
+
+        remove = self.store.save_theme_review([
+            {"action": "remove_segment_tag", "source_theme_id": exercise["id"], "payload": {"segment_id": segment["id"]}}
+        ])
+        self.store.apply_theme_changes([{"proposal_id": remove["proposals"][0]["proposal_id"], "decision": "approved"}])
+        with self.store.connect() as db:
+            self.assertNotIn("健身", db.execute("SELECT themes FROM entries_fts WHERE entry_id=?", (entry_id,)).fetchone()[0])
+
+        add = self.store.save_theme_review([
+            {"action": "add_segment_tag", "target_theme_id": fitness_id, "payload": {"segment_id": segment["id"]}}
+        ])
+        self.store.apply_theme_changes([{"proposal_id": add["proposals"][0]["proposal_id"], "decision": "approved"}])
+        with self.store.connect() as db:
+            self.assertIn("健身", db.execute("SELECT themes FROM entries_fts WHERE entry_id=?", (entry_id,)).fetchone()[0])
+        self.assertEqual(journal_bytes, (original.read_bytes(), cleaned.read_bytes()))
+
+        first = self.confirm_entry("今天散步并看了晚霞。", "2026-01-05", "远足")
+        second = self.confirm_entry("整理户外装备。", "2026-01-06", "户外")
+        with self.store.connect() as db:
+            source = db.execute("SELECT * FROM themes WHERE name='远足'").fetchone()
+            target = db.execute("SELECT * FROM themes WHERE name='户外'").fetchone()
+            source_segment = db.execute("SELECT * FROM segments WHERE entry_id=?", (first,)).fetchone()
+            target_segment = db.execute("SELECT * FROM segments WHERE entry_id=?", (second,)).fetchone()
+        original_path = next((self.root / "journals" / "originals").rglob(f"*{first}.md"))
+        clean_path = next((self.root / "journals" / "cleaned").rglob(f"*{first}.md"))
+        original_bytes = original_path.read_bytes()
+        clean_bytes = clean_path.read_bytes()
         activate = self.store.save_theme_review([{"action": "activate", "source_theme_id": source["id"]}])
         self.store.apply_theme_changes([{"proposal_id": activate["proposals"][0]["proposal_id"], "decision": "approved"}])
         merge = self.store.save_theme_review([{"action": "merge", "source_theme_id": source["id"], "target_theme_id": target["id"]}])
@@ -228,12 +335,31 @@ class DiaryStoreTests(unittest.TestCase):
         original = next((self.root / "journals" / "originals").rglob(f"*{entry_id}.md"))
         cleaned = next((self.root / "journals" / "cleaned").rglob(f"*{entry_id}.md"))
         before = (original.read_bytes(), cleaned.read_bytes())
+        with self.store.connect() as db:
+            db.execute("DROP TABLE segment_tags")
+            db.commit()
         self.store.initialize()
         self.store.initialize()
         self.assertEqual(before, (original.read_bytes(), cleaned.read_bytes()))
         with self.store.connect() as db:
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        self.assertTrue({"theme_change_proposals", "goals", "goal_events", "goal_entry_links", "goal_change_proposals"}.issubset(tables))
+            backfilled = db.execute(
+                """SELECT count(*) FROM segment_tags st JOIN segments s ON s.id=st.segment_id
+                   WHERE s.entry_id=? AND st.theme_id=s.theme_id""",
+                (entry_id,),
+            ).fetchone()[0]
+        self.assertTrue({"theme_change_proposals", "segment_tags", "goals", "goal_events", "goal_entry_links", "goal_change_proposals"}.issubset(tables))
+        self.assertEqual(backfilled, 1)
+
+    def test_default_personal_capture_guidance_and_no_external_semantic_dependency(self):
+        project = Path(__file__).parents[1]
+        agreement = (project / "AGENTS.md").read_text(encoding="utf-8")
+        skill = (project / ".agents" / "skills" / "record-life-journal" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("unqualified declarative message", agreement)
+        self.assertIn("Default personal-life capture", skill)
+        package_text = "\n".join(path.read_text(encoding="utf-8") for path in (project / "diary_agent").glob("*.py"))
+        for forbidden in ("OPENAI_API_KEY", "import openai", "embedding", "vector database"):
+            self.assertNotIn(forbidden, package_text)
 
     def test_project_skill_script_imports_from_any_working_directory(self):
         script = Path(__file__).parents[1] / ".agents" / "skills" / "record-life-journal" / "scripts" / "journal.py"
