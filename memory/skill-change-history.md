@@ -70,3 +70,13 @@
 - Revision: `46e28adc-7ae8-4249-8a54-3afde6aa8d72`
 - Tests: py_compile passed; /mnt/d/Project_PA/condaenv_host/bin/python -m pytest: 20 passed; skill-creator quick_validate: Skill is valid; CLI minimal-clean and preserve-verbatim smokes passed; SQLite integrity_check: ok; initial style profile created from 40 confirmed originals.
 
+## 2026-07-14T16:21:11+08:00 approved
+
+- Revision: `42d8bcd7-677c-4e9c-a22c-0b525b893651`
+- Tests: User approved with clarification: long_term means goals spanning multiple years; short_term means goals intended to finish within one year.
+
+## 2026-07-14T16:27:05+08:00 applied
+
+- Revision: `42d8bcd7-677c-4e9c-a22c-0b525b893651`
+- Tests: Approved clarification implemented: long_term spans multiple years; short_term is intended to finish within one year. Added four-level hierarchy and idempotent SQLite CHECK migration. Validation: /mnt/d/Project_PA/condaenv_host/bin/python -m pytest -> 21 passed; quick_validate.py -> Skill is valid; live database foreign_key_check -> no errors.
+

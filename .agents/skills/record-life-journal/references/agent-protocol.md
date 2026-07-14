@@ -126,4 +126,4 @@ Pass proposed changes to `goal-change-preview`:
 ]
 ```
 
-`create` requires `scope` and `title`. Use `ref` and `parent_ref` for a newly proposed hierarchy in one preview. `link_entry` requires a confirmed entry plus `progress`, `blocker`, `reflection`, or `related`. Do not convert inference into a goal. Apply only explicit per-item decisions.
+`create` requires `scope` and `title`. Use `life` for an open-ended life direction, `long_term` for a goal spanning multiple years, `short_term` for a goal intended to finish within one year, and `weekly` for a one-week focus. Use `ref` and `parent_ref` for a newly proposed hierarchy in one preview; parents must be broader in the `life -> long_term -> short_term -> weekly` order, though intermediate levels may be omitted. `link_entry` requires a confirmed entry plus `progress`, `blocker`, `reflection`, or `related`. Do not convert inference into a goal. Apply only explicit per-item decisions.

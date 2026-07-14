@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -374,8 +375,9 @@ class DiaryStoreTests(unittest.TestCase):
         self.store.apply_goal_changes([{"proposal_id": rejected["proposals"][0]["proposal_id"], "decision": "rejected"}])
         self.assertEqual(mirror_path.read_bytes(), mirror_before)
         preview = self.store.goal_change_preview([
-            {"action": "create", "ref": "life", "payload": {"scope": "life", "title": "保持长期健康", "priority": 5}},
-            {"action": "create", "ref": "short", "parent_ref": "life", "payload": {"scope": "short_term", "title": "提升跑步耐力", "success_criteria": "连续跑步五公里"}},
+            {"action": "create", "ref": "life", "payload": {"scope": "life", "title": "保持终身健康方向", "priority": 5}},
+            {"action": "create", "ref": "long", "parent_ref": "life", "payload": {"scope": "long_term", "title": "未来五年建立可持续体能"}},
+            {"action": "create", "ref": "short", "parent_ref": "long", "payload": {"scope": "short_term", "title": "今年提升跑步耐力", "success_criteria": "连续跑步五公里"}},
             {"action": "create", "ref": "week", "parent_ref": "short", "payload": {"scope": "weekly", "title": "本周跑步三次"}},
         ])
         with self.store.connect() as db:
@@ -383,12 +385,24 @@ class DiaryStoreTests(unittest.TestCase):
         decisions = [{"proposal_id": item["proposal_id"], "decision": "approved"} for item in preview["proposals"]]
         applied = self.store.apply_goal_changes(decisions)
         goal_ids = {item["goal_id"] for item in applied["results"]}
-        self.assertEqual(len(goal_ids), 3)
+        self.assertEqual(len(goal_ids), 4)
         goals = self.store.goal_context()["goals"]
-        self.assertEqual(len(goals), 3)
+        self.assertEqual(len(goals), 4)
+        life_goal = next(item for item in goals if item["scope"] == "life")
+        long_goal = next(item for item in goals if item["scope"] == "long_term")
         weekly_goal = next(item for item in goals if item["scope"] == "weekly")
         short_goal = next(item for item in goals if item["scope"] == "short_term")
+        self.assertEqual(long_goal["parent_goal_id"], life_goal["id"])
+        self.assertEqual(short_goal["parent_goal_id"], long_goal["id"])
         self.assertEqual(weekly_goal["parent_goal_id"], short_goal["id"])
+
+        invalid = self.store.goal_change_preview([
+            {"action": "create", "payload": {"scope": "long_term", "parent_goal_id": long_goal["id"], "title": "非法同层目标"}}
+        ])
+        with self.assertRaisesRegex(ValueError, "broader scope"):
+            self.store.apply_goal_changes([
+                {"proposal_id": invalid["proposals"][0]["proposal_id"], "decision": "approved"}
+            ])
 
         link = self.store.goal_change_preview([
             {"action": "link_entry", "goal_id": weekly_goal["id"], "payload": {"entry_id": entry_id, "relation": "progress", "evidence": "完成两次跑步"}}
@@ -408,10 +422,63 @@ class DiaryStoreTests(unittest.TestCase):
             self.assertGreaterEqual(db.execute("SELECT count(*) FROM goal_events WHERE goal_id=?", (weekly_goal["id"],)).fetchone()[0], 3)
             self.assertEqual(db.execute("SELECT count(*) FROM goal_entry_links WHERE goal_id=?", (weekly_goal["id"],)).fetchone()[0], 1)
         mirror = (self.root / "memory" / "goals.md").read_text(encoding="utf-8")
+        self.assertIn("## Long-term", mirror)
+        self.assertIn("未来五年建立可持续体能", mirror)
         self.assertIn("本周跑步三次", mirror)
         self.assertIn("[paused]", mirror)
         weekly = self.store.weekly_context(datetime(2026, 7, 13, 1, 0, tzinfo=TZ))
         self.assertTrue(any(item["id"] == short_goal["id"] for item in weekly["goals"]))
+
+    def test_goal_scope_migration_adds_long_term_without_losing_history(self):
+        self.store.paths.db.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self.store.paths.db) as db:
+            db.executescript(
+                """
+                CREATE TABLE goals (
+                    id TEXT PRIMARY KEY,
+                    scope TEXT NOT NULL CHECK(scope IN ('life','short_term','weekly')),
+                    parent_goal_id TEXT REFERENCES goals(id),
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','paused','abandoned')),
+                    priority INTEGER NOT NULL DEFAULT 0,
+                    start_date TEXT,
+                    target_date TEXT,
+                    success_criteria TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE goal_events (
+                    id TEXT PRIMARY KEY,
+                    goal_id TEXT NOT NULL REFERENCES goals(id),
+                    event_type TEXT NOT NULL,
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    evidence_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL
+                );
+                INSERT INTO goals VALUES (
+                    'legacy-life', 'life', NULL, '既有人生目标', '', 'active', 0,
+                    NULL, NULL, '', '2026-01-01T00:00:00+08:00', '2026-01-01T00:00:00+08:00'
+                );
+                INSERT INTO goal_events VALUES (
+                    'legacy-event', 'legacy-life', 'created', '{}', '[]', '2026-01-01T00:00:00+08:00'
+                );
+                """
+            )
+
+        self.store.initialize()
+        with self.store.connect() as db:
+            goals_sql = db.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='goals'"
+            ).fetchone()[0]
+            self.assertIn("'long_term'", goals_sql)
+            self.assertEqual(db.execute("SELECT title FROM goals WHERE id='legacy-life'").fetchone()[0], "既有人生目标")
+            self.assertEqual(db.execute("SELECT goal_id FROM goal_events WHERE id='legacy-event'").fetchone()[0], "legacy-life")
+            self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
+
+        long_goal_id = self.create_goal("未来五年完成专业转型", scope="long_term")
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT scope FROM goals WHERE id=?", (long_goal_id,)).fetchone()[0], "long_term")
 
     def test_capture_returns_only_relevant_active_goal_context(self):
         no_goals = self.store.create_draft("今天完成了跑步训练。", entry_date="2026-07-07")

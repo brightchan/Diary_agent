@@ -7,7 +7,7 @@ The project uses Python's standard library and Codex's reasoning. It does not re
 ## Choose the section you need
 
 - [For users: everyday use](#for-users-everyday-use) explains what to say to Codex.
-- [Goals: life, short-term, and weekly](#goals-life-short-term-and-weekly) explains which goal types exist and how to add them.
+- [Goals: life, long-term, short-term, and weekly](#goals-life-long-term-short-term-and-weekly) explains which goal types exist and how to add them.
 - [For AI agents: operating protocol](#for-ai-agents-operating-protocol) defines the safe workflow and commands.
 - [For maintainers: improving the system](#for-maintainers-improving-the-system) covers tests, backups, and Skill revisions.
 - [Storage and repository map](#storage-and-repository-map) explains where data and code live.
@@ -121,15 +121,16 @@ python3 -m diary_agent.cli --root . backup
 
 This creates a consistent SQLite backup and SHA-256 manifest under `data/backups/`. Journal Markdown is already stored separately and is intentionally tracked in Git with the main database.
 
-## Goals: life, short-term, and weekly
+## Goals: life, long-term, short-term, and weekly
 
-The system supports all three goal scopes:
+The system supports four goal scopes:
 
 | Scope | Purpose | Parent rule |
 | --- | --- | --- |
-| `life` | A durable direction or long-term commitment | Must be top-level |
-| `short_term` | A nearer outcome that advances a broader direction | May belong to a life goal |
-| `weekly` | A concrete focus for one week | May belong to a life or short-term goal |
+| `life` | An open-ended life direction without a fixed completion horizon | Must be top-level |
+| `long_term` | An outcome that spans multiple years | May belong to a life goal |
+| `short_term` | An outcome intended to finish within one year | May belong to a life or long-term goal |
+| `weekly` | A concrete focus for one week | May belong to any broader goal |
 
 A parent must always be broader than its child. Goal status can be `active`, `completed`, `paused`, or `abandoned`.
 
@@ -139,11 +140,15 @@ State explicitly that you want a goal created. Diary Agent never converts an old
 
 For a life goal:
 
-> Add a life goal: Maintain long-term physical and mental health. Priority 5. Success means I have sustainable exercise, sleep, and recovery habits.
+> Add a life goal: Maintain lifelong physical and mental health. Priority 5. Success means I have sustainable exercise, sleep, and recovery habits.
 
-For a connected short-term goal:
+For a connected multi-year long-term goal:
 
-> Under “Maintain long-term physical and mental health,” add a short-term goal: Build enough running endurance to complete five kilometres comfortably by 30 September.
+> Under “Maintain lifelong physical and mental health,” add a long-term goal: Establish sustainable endurance and strength over the next five years.
+
+For a connected short-term goal intended to finish within one year:
+
+> Under “Establish sustainable endurance and strength over the next five years,” add a short-term goal: Build enough running endurance to complete five kilometres comfortably by 30 September.
 
 For a weekly goal:
 
@@ -151,7 +156,7 @@ For a weekly goal:
 
 Codex should show the proposed scope, title, parent, dates, priority, description, and success criteria. Reply with a precise decision such as:
 
-> Approve all three goal proposals.
+> Approve all four goal proposals.
 
 or:
 
@@ -277,8 +282,9 @@ Never infer a goal from old diary prose. Convert an explicit user request into a
 
 ```bash
 python3 -m diary_agent.cli --root . goal-change-preview --changes '[
-  {"action":"create","ref":"life","payload":{"scope":"life","title":"Maintain long-term health","priority":5}},
-  {"action":"create","ref":"short","parent_ref":"life","payload":{"scope":"short_term","title":"Build running endurance","success_criteria":"Run five kilometres comfortably"}},
+  {"action":"create","ref":"life","payload":{"scope":"life","title":"Maintain lifelong health","priority":5}},
+  {"action":"create","ref":"long","parent_ref":"life","payload":{"scope":"long_term","title":"Establish sustainable fitness over the next five years"}},
+  {"action":"create","ref":"short","parent_ref":"long","payload":{"scope":"short_term","title":"Build running endurance this year","success_criteria":"Run five kilometres comfortably"}},
   {"action":"create","parent_ref":"short","payload":{"scope":"weekly","title":"Run three times this week"}}
 ]'
 ```

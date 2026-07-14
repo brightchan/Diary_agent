@@ -22,6 +22,15 @@ MULTI_TOPIC_RE = re.compile(r"(?:另外|还有|说到|关于|另一方面|第一
 CONTINUITY_RE = re.compile(r"(?:下周|以后|继续|打算|计划|下一步|还没|尚未|要做|跟进|进展)")
 UNCERTAINTY_RE = re.compile(r"(?:可能叫|好像叫|不知道是不是|听起来像|记不清|某个人|某个项目|[?？]{2,})")
 
+GOAL_SCOPES = ("life", "long_term", "short_term", "weekly")
+GOAL_SCOPE_RANK = {scope: rank for rank, scope in enumerate(GOAL_SCOPES)}
+GOAL_SCOPE_LABELS = {
+    "life": "Life",
+    "long_term": "Long-term",
+    "short_term": "Short-term",
+    "weekly": "Weekly",
+}
+
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -118,7 +127,7 @@ CREATE TABLE IF NOT EXISTS followups (
 
 CREATE TABLE IF NOT EXISTS goals (
     id TEXT PRIMARY KEY,
-    scope TEXT NOT NULL CHECK(scope IN ('life','short_term','weekly')),
+    scope TEXT NOT NULL CHECK(scope IN ('life','long_term','short_term','weekly')),
     parent_goal_id TEXT REFERENCES goals(id),
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
@@ -353,6 +362,48 @@ class DiaryStore:
                     ON theme_change_proposals(status, created_at);
                 """
             )
+        goals_sql = db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='goals'"
+        ).fetchone()
+        if goals_sql and "'long_term'" not in str(goals_sql["sql"]):
+            db.commit()
+            db.execute("PRAGMA foreign_keys=OFF")
+            try:
+                db.executescript(
+                    """
+                    BEGIN;
+                    CREATE TABLE goals_new (
+                        id TEXT PRIMARY KEY,
+                        scope TEXT NOT NULL CHECK(scope IN ('life','long_term','short_term','weekly')),
+                        parent_goal_id TEXT REFERENCES goals(id),
+                        title TEXT NOT NULL,
+                        description TEXT NOT NULL DEFAULT '',
+                        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','paused','abandoned')),
+                        priority INTEGER NOT NULL DEFAULT 0,
+                        start_date TEXT,
+                        target_date TEXT,
+                        success_criteria TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    INSERT INTO goals_new
+                        SELECT * FROM goals;
+                    DROP TABLE goals;
+                    ALTER TABLE goals_new RENAME TO goals;
+                    CREATE INDEX IF NOT EXISTS idx_goals_status_scope
+                        ON goals(status, scope, priority);
+                    COMMIT;
+                    """
+                )
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
+            finally:
+                db.execute("PRAGMA foreign_keys=ON")
+            foreign_key_errors = db.execute("PRAGMA foreign_key_check").fetchall()
+            if foreign_key_errors:
+                raise RuntimeError("goal scope migration failed foreign-key validation")
         before = db.total_changes
         db.execute(
             """INSERT OR IGNORE INTO segment_tags(segment_id,theme_id,created_at)
@@ -1573,7 +1624,7 @@ class DiaryStore:
             goal_id = str(payload.get("goal_id") or goal_id or uuid.uuid4())
             scope = str(payload.get("scope", ""))
             title = str(payload.get("title", "")).strip()
-            if scope not in {"life", "short_term", "weekly"} or not title:
+            if scope not in GOAL_SCOPE_RANK or not title:
                 raise ValueError("goal creation requires scope and title")
             parent = payload.get("parent_goal_id")
             self._validate_goal_parent(db, goal_id, scope, parent)
@@ -1628,7 +1679,7 @@ class DiaryStore:
         return {"goal_id": goal_id, "event_type": event_type}
 
     def _validate_goal_parent(self, db: sqlite3.Connection, goal_id: str, scope: str, parent_goal_id: str | None) -> None:
-        if scope not in {"life", "short_term", "weekly"}:
+        if scope not in GOAL_SCOPE_RANK:
             raise ValueError("invalid goal scope")
         if scope == "life" and parent_goal_id:
             raise ValueError("life goals cannot have a parent")
@@ -1639,8 +1690,7 @@ class DiaryStore:
         parent = db.execute("SELECT scope,parent_goal_id FROM goals WHERE id=?", (parent_goal_id,)).fetchone()
         if not parent:
             raise KeyError(str(parent_goal_id))
-        rank = {"life": 0, "short_term": 1, "weekly": 2}
-        if rank[str(parent["scope"])] >= rank[scope]:
+        if GOAL_SCOPE_RANK[str(parent["scope"])] >= GOAL_SCOPE_RANK[scope]:
             raise ValueError("parent goal must have a broader scope")
         ancestor = parent
         seen = {goal_id}
@@ -1718,9 +1768,8 @@ class DiaryStore:
                    ORDER BY ge.created_at DESC LIMIT 12"""
             ).fetchall()
         lines = ["# Goals", "", "SQLite is the source of truth. This file is regenerated only after confirmed goal changes.", ""]
-        labels = {"life": "Life", "short_term": "Short-term", "weekly": "Weekly"}
-        for scope in ("life", "short_term", "weekly"):
-            lines.extend([f"## {labels[scope]}", ""])
+        for scope in GOAL_SCOPES:
+            lines.extend([f"## {GOAL_SCOPE_LABELS[scope]}", ""])
             scoped = [row for row in goals if row["scope"] == scope]
             if not scoped:
                 lines.extend(["- None", ""])

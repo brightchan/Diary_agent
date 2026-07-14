@@ -10,7 +10,7 @@ SQLite at `data/diary.sqlite3` is the structured source of truth.
 - `entry_links`: evidence-backed relationships.
 - `entities`: confirmed names and transcription aliases.
 - `followups`: pending, answered, skipped, or deferred questions.
-- `goals`: confirmed life, short-term, and weekly goal hierarchy.
+- `goals`: confirmed life, multi-year long-term, within-one-year short-term, and weekly goal hierarchy.
 - `goal_events`: immutable goal creation, update, status, and evidence-link history.
 - `goal_entry_links`: confirmed progress, blocker, reflection, or related evidence.
 - `entry_goal_interpretations`: AI-generated, current-entry evidence annotations persisted only with diary confirmation; separate from authoritative goal links and events.
@@ -37,3 +37,4 @@ Theme changes never rewrite verbatim originals or confirmed cleaned Markdown. `r
 Goal mirror:
 
 - `memory/goals.md`: regenerated from SQLite only after confirmed goal changes; current hierarchy plus recent confirmed events.
+- Goal breadth is `life -> long_term -> short_term -> weekly`: life goals are open-ended directions, long-term goals span multiple years, short-term goals are intended to finish within one year, and weekly goals cover one week. Parents must be broader than children, but intermediate levels are optional.

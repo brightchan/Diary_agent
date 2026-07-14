@@ -1,6 +1,6 @@
 ---
 name: record-life-journal
-description: Capture clear personal-life statements by default; clean, classify, tag, connect, review, confirm, search, and summarize diary entries; govern themes and confirmed life, short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, standalone personal experiences or reflections, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences, workflow feedback, or diary skill improvements.
+description: Capture clear personal-life statements by default; clean, classify, tag, connect, review, confirm, search, and summarize diary entries; govern themes and confirmed life, multi-year long-term, within-one-year short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, standalone personal experiences or reflections, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences, workflow feedback, or diary skill improvements.
 ---
 
 # Record Life Journal
@@ -103,6 +103,7 @@ Read [agent-protocol.md](references/agent-protocol.md) before preparing change p
 - Support `create`, `activate`, `deactivate`, `rename`, `merge`, `split`, explicit primary-theme `reassign_segment`, and explicit `add_segment_tag` or `remove_segment_tag`. Split creates Active replacements and deactivates the source; it never rewrites historical segments unless a separate proposal is approved.
 - Keep Inactive theme text searchable through entry full text, but exclude its tag from default theme-driven retrieval. Keep Merged history and resolve it to the canonical Active theme.
 - Save goal proposals with `goal-change-preview`; apply only explicit per-item decisions through `apply-goal-changes`. Never infer an old diary statement into a user goal.
+- Classify `life` as an open-ended life direction, `long_term` as a goal spanning multiple years, `short_term` as a goal intended to finish within one year, and `weekly` as a one-week focus. Use `life -> long_term -> short_term -> weekly` as the breadth order while allowing a child to omit intermediate parents.
 - Use `goal-context` for goal review. Use `conversation-context` to retrieve only relevant Active goals, recent events, and a small evidence set for a current question.
 - Automatic entry goal interpretations are confirmed analytical annotations only. Explicit `link_entry` proposals remain the path for promoting diary evidence into authoritative goal evidence.
 - Treat SQLite as truth. Regenerate `memory/goals.md` only after confirmed goal changes. Never modify originals or silently rewrite confirmed cleaned Markdown when theme or goal state changes.
