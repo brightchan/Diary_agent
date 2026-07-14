@@ -16,6 +16,13 @@ Use this compact contract between cleaner, classifier, continuity, and orchestra
 
 `material_changes` must stay empty. If an edit could change meaning, move it to `uncertainties`.
 
+Before cleaning, inspect the routing signal and compact `cleaning_style` returned by `create-draft`:
+
+- When `cleaning_mode` is `preserve_verbatim`, return the verbatim input as `clean_text` apart from accidental outer whitespace.
+- A lack of polished written punctuation or formal phrasing is not a reason to edit. Do not beautify, formalize, synonym-swap, or restructure the user's prose.
+- When minimal cleaning is justified, change only the specific obvious speech artifact and preserve characteristic repetition, code-switching, wording, punctuation, and rhythm.
+- Treat the persisted style profile as evidence about what to preserve, not a template to force onto new input. If it conflicts with the current original, the current original wins.
+
 ## Classifier output
 
 ```json

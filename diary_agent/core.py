@@ -196,6 +196,15 @@ CREATE TABLE IF NOT EXISTS skill_revisions (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS cleaning_style_profiles (
+    id TEXT PRIMARY KEY,
+    profile_json TEXT NOT NULL,
+    source_entry_ids_json TEXT NOT NULL DEFAULT '[]',
+    sample_start TEXT NOT NULL,
+    sample_end TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS agent_runs (
     id TEXT PRIMARY KEY,
     entry_id TEXT REFERENCES entries(id),
@@ -221,6 +230,7 @@ CREATE INDEX IF NOT EXISTS idx_goal_links_goal_created ON goal_entry_links(goal_
 CREATE INDEX IF NOT EXISTS idx_goal_interpretations_goal_entry
     ON entry_goal_interpretations(goal_id, entry_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_goal_changes_status ON goal_change_proposals(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_cleaning_style_created ON cleaning_style_profiles(created_at);
 """
 
 
@@ -304,6 +314,10 @@ class DiaryStore:
             "workflow-decisions.md": "# Workflow Decisions\n\n",
             "skill-change-history.md": "# Skill Change History\n\n",
             "goals.md": "# Goals\n\nNo confirmed goals.\n",
+            "cleaning-style.md": (
+                "# Cleaning Style Profile\n\n"
+                "No profile yet. Until enough confirmed original entries exist, preserve the user's wording verbatim unless obvious speech artifacts require minimal cleaning.\n"
+            ),
         }
         for name, content in memory_files.items():
             path = self.paths.memory / name
@@ -389,6 +403,7 @@ class DiaryStore:
             "routing_decision": routing,
             "context": context,
             "goal_context": goal_context,
+            "cleaning_style": self.current_cleaning_style(),
         }
 
     def route(self, text: str, relevant_goal_count: int = 0) -> dict[str, Any]:
@@ -413,6 +428,7 @@ class DiaryStore:
                 "uncertain_term": uncertain,
                 "continuation_language": continuity,
                 "relevant_goal_count": relevant_goal_count,
+                "cleaning_mode": "minimal" if speech_like or uncertain else "preserve_verbatim",
             },
             "model_preference": {
                 "cleaner": "lightweight_if_supported",
@@ -424,11 +440,166 @@ class DiaryStore:
         }
 
     def conservative_clean(self, text: str) -> str:
-        cleaned = FILLER_RE.sub("", text)
+        source = text.strip()
+        signals = self.route(source)["signals"]
+        if not signals["speech_like"] and not signals["uncertain_term"]:
+            return source
+        cleaned = FILLER_RE.sub("", source)
         cleaned = re.sub(r"([，。！？；、])\1+", r"\1", cleaned)
         cleaned = re.sub(r"[ \t]+", " ", cleaned)
         cleaned = re.sub(r" *\n *", "\n", cleaned)
         return cleaned.strip(" ，")
+
+    def _latest_cleaning_style(self, db: sqlite3.Connection) -> dict[str, Any] | None:
+        row = db.execute(
+            "SELECT * FROM cleaning_style_profiles ORDER BY created_at DESC,id DESC LIMIT 1"
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "profile_id": row["id"],
+            "profile": json.loads(row["profile_json"]),
+            "sample_start": row["sample_start"],
+            "sample_end": row["sample_end"],
+            "updated_at": row["created_at"],
+        }
+
+    def current_cleaning_style(self) -> dict[str, Any] | None:
+        self.initialize()
+        with self.connect() as db:
+            return self._latest_cleaning_style(db)
+
+    def cleaning_style_context(self, char_budget: int = 8000) -> dict[str, Any]:
+        """Return bounded new confirmed originals for periodic voice calibration."""
+        self.initialize()
+        budget = max(600, min(int(char_budget), 16000))
+        with self.connect() as db:
+            current = self._latest_cleaning_style(db)
+            parameters: list[Any] = []
+            where = "status='confirmed' AND entry_type!='weekly'"
+            if current:
+                where += " AND confirmed_at>?"
+                parameters.append(current["updated_at"])
+            rows = db.execute(
+                f"""SELECT id,entry_date,raw_text,clean_text,confirmed_at
+                    FROM entries WHERE {where}
+                    ORDER BY confirmed_at DESC,created_at DESC LIMIT 80""",
+                parameters,
+            ).fetchall()
+
+        samples: list[dict[str, Any]] = []
+        used = 0
+        for row in rows:
+            sample_chars = len(row["raw_text"]) + len(row["clean_text"] or "")
+            if samples and used + sample_chars > budget:
+                continue
+            samples.append(dict(row))
+            used += sample_chars
+            if used >= budget:
+                break
+        samples.reverse()
+        raw_chars = sum(len(item["raw_text"]) for item in samples)
+        return {
+            "has_new_samples": bool(samples),
+            "ready_for_review": len(samples) >= 3 and raw_chars >= 200,
+            "current_style": current,
+            "samples": samples,
+            "sample_count": len(samples),
+            "raw_chars": raw_chars,
+            "char_budget": budget,
+        }
+
+    def save_cleaning_style(self, profile: dict[str, Any], source_entry_ids: list[str]) -> dict[str, Any]:
+        """Persist a compact evidence-backed voice profile without rewriting journals."""
+        self.initialize()
+        if not isinstance(profile, dict) or not profile:
+            raise ValueError("profile must be a non-empty object")
+        required = {"summary", "preserve", "avoid", "observations"}
+        if not required.issubset(profile):
+            raise ValueError("profile requires summary, preserve, avoid, and observations")
+        if not isinstance(profile["summary"], str) or not profile["summary"].strip():
+            raise ValueError("profile summary must be a non-empty string")
+        if not all(isinstance(profile[key], list) for key in ("preserve", "avoid", "observations")):
+            raise ValueError("profile preserve, avoid, and observations must be arrays")
+        if not all(isinstance(item, str) and item.strip() for key in ("preserve", "avoid") for item in profile[key]):
+            raise ValueError("profile preserve and avoid items must be non-empty strings")
+        for observation in profile["observations"]:
+            if not isinstance(observation, dict) or not {
+                "trait",
+                "evidence",
+            }.issubset(observation):
+                raise ValueError("each observation requires trait and evidence")
+            if not all(isinstance(observation[key], str) and observation[key].strip() for key in ("trait", "evidence")):
+                raise ValueError("observation trait and evidence must be non-empty strings")
+        serialized = _json(profile)
+        if len(serialized) > 6000:
+            raise ValueError("profile must stay compact")
+
+        entry_ids = list(dict.fromkeys(str(item) for item in source_entry_ids if str(item)))
+        if len(entry_ids) < 3:
+            raise ValueError("at least three confirmed original entries are required")
+        placeholders = ",".join("?" for _ in entry_ids)
+        with self.connect() as db:
+            rows = db.execute(
+                f"""SELECT id,entry_date,raw_text FROM entries
+                    WHERE id IN ({placeholders}) AND status='confirmed' AND entry_type!='weekly'""",
+                entry_ids,
+            ).fetchall()
+            if len(rows) != len(entry_ids):
+                raise ValueError("style evidence must use confirmed non-weekly entries")
+            if sum(len(row["raw_text"]) for row in rows) < 200:
+                raise ValueError("style evidence is too small; wait for more original input")
+            by_id = {row["id"]: row for row in rows}
+            ordered = [by_id[entry_id] for entry_id in entry_ids]
+            profile_id = str(uuid.uuid4())
+            now = _iso()
+            db.execute(
+                """INSERT INTO cleaning_style_profiles(
+                       id,profile_json,source_entry_ids_json,sample_start,sample_end,created_at
+                   ) VALUES(?,?,?,?,?,?)""",
+                (
+                    profile_id,
+                    serialized,
+                    _json(entry_ids),
+                    min(row["entry_date"] for row in ordered),
+                    max(row["entry_date"] for row in ordered),
+                    now,
+                ),
+            )
+            db.commit()
+
+        lines = [
+            "# Cleaning Style Profile",
+            "",
+            "This profile is derived only from confirmed verbatim originals. It guides minimal cleaning and never authorizes rewriting confirmed journals.",
+            "",
+            f"- Updated: {now}",
+            f"- Evidence period: {min(row['entry_date'] for row in ordered)} to {max(row['entry_date'] for row in ordered)}",
+            f"- Evidence entries: {', '.join(f'`{entry_id}`' for entry_id in entry_ids)}",
+            "",
+            "## Summary",
+            "",
+            profile["summary"].strip(),
+            "",
+            "## Preserve",
+            "",
+        ]
+        lines.extend(f"- {item.strip()}" for item in profile["preserve"])
+        lines.extend(["", "## Avoid", ""])
+        lines.extend(f"- {item.strip()}" for item in profile["avoid"])
+        lines.extend(["", "## Evidence-backed observations", ""])
+        lines.extend(
+            f"- **{item['trait'].strip()}**: {item['evidence'].strip()}"
+            for item in profile["observations"]
+        )
+        lines.append("")
+        (self.paths.memory / "cleaning-style.md").write_text("\n".join(lines), encoding="utf-8")
+        return {
+            "profile_id": profile_id,
+            "sample_count": len(entry_ids),
+            "path": str(self.paths.memory / "cleaning-style.md"),
+            "updated_at": now,
+        }
 
     def retrieve_context(self, query: str, token_budget: int = 1800) -> list[dict[str, Any]]:
         """Return a relevance-driven context set with no fixed item-count cap."""

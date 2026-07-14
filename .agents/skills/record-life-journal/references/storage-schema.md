@@ -19,11 +19,13 @@ SQLite at `data/diary.sqlite3` is the structured source of truth.
 - `skill_revisions`: Skill changes with Git snapshots.
 - `agent_runs`: compact routing and size telemetry, never hidden reasoning.
 - `entries_fts`: confirmed cleaned-text plus every Active/canonical primary theme and tag. Inactive tags are removed from theme-driven matching without removing entry full text.
+- `cleaning_style_profiles`: compact, evidence-bounded cleaning-style profiles derived from confirmed non-weekly originals; source entry ids and evidence dates are retained for audit.
 
 Markdown mirrors:
 
 - `journals/originals/YYYY/MM/`: verbatim input.
 - `journals/cleaned/YYYY/MM/`: confirmed cleaned diary.
+- `memory/cleaning-style.md`: latest human-readable preservation profile; SQLite profile history remains authoritative.
 - `journals/weekly/YYYY/`: confirmed weekly journal.
 
 The main SQLite database and all journal Markdown files are intentionally Git-tracked. WAL and SHM sidecars are ignored.

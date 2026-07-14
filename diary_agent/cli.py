@@ -38,6 +38,13 @@ def parser() -> argparse.ArgumentParser:
     clean = commands.add_parser("local-clean")
     clean.add_argument("--text", required=True)
 
+    style_context = commands.add_parser("cleaning-style-context")
+    style_context.add_argument("--char-budget", type=int, default=8000)
+
+    style_save = commands.add_parser("save-cleaning-style")
+    style_save.add_argument("--profile", required=True, help="JSON string or file")
+    style_save.add_argument("--source-entry-ids", required=True, help="JSON string or file")
+
     preview = commands.add_parser("save-preview")
     preview.add_argument("--entry-id", required=True)
     preview.add_argument("--clean-text", required=True)
@@ -127,6 +134,13 @@ def main(argv: list[str] | None = None) -> int:
             result = store.route(args.text)
         elif args.command == "local-clean":
             result = {"clean_text": store.conservative_clean(args.text)}
+        elif args.command == "cleaning-style-context":
+            result = store.cleaning_style_context(args.char_budget)
+        elif args.command == "save-cleaning-style":
+            result = store.save_cleaning_style(
+                load_json(args.profile, {}),
+                load_json(args.source_entry_ids, []),
+            )
         elif args.command == "save-preview":
             result = store.save_preview(
                 args.entry_id,

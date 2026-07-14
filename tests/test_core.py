@@ -147,6 +147,79 @@ class DiaryStoreTests(unittest.TestCase):
         self.assertTrue(Path(backup["database"]).exists())
         self.assertEqual(len(backup["sha256"]), 64)
 
+    def test_cleaning_preserves_non_speech_input_and_minimally_removes_fillers(self):
+        original = "今天把该做的事情都做完了。。。这一点让我很安心。"
+        self.assertEqual(self.store.conservative_clean(original), original)
+        self.assertEqual(
+            self.store.conservative_clean("嗯，今天把该做的事情做完了。。"),
+            "今天把该做的事情做完了。",
+        )
+        self.assertEqual(self.store.route(original)["signals"]["cleaning_mode"], "preserve_verbatim")
+        self.assertEqual(self.store.route("嗯，今天完成了。 ")["signals"]["cleaning_mode"], "minimal")
+
+    def test_weekly_cleaning_style_profile_uses_confirmed_originals_and_reaches_new_drafts(self):
+        texts = [
+            "今天把积压的事情一项项处理完。过程没有什么戏剧性，但清空列表之后，脑子确实安静了不少。我没有刻意总结大道理，只是觉得这种踏实感值得记下来。",
+            "下午重新梳理了接下来的安排，我还是习惯先写结论，再补充为什么这样决定，以及还有哪些不确定。这样写对我更直接，回头看时也能很快找到当时真正关心的问题。",
+            "晚上回头看今天的记录，中文里夹一点 English 对我来说很自然，不需要为了所谓统一而改掉。有些词当下就是英文更顺手，强行换成中文反而不像我平时会说的话。",
+        ]
+        confirmed_ids = [
+            self.confirm_entry(text, f"2026-07-{index + 1:02d}")
+            for index, text in enumerate(texts)
+        ]
+        self.store.create_draft("这条还没有确认，不应进入文风样本。", entry_date="2026-07-04")
+        weekly = self.store.create_draft("这是系统生成的周记，不应作为用户文风证据。", "weekly", entry_date="2026-07-05")
+        self.store.save_preview(
+            weekly["entry_id"],
+            "这是系统生成的周记，不应作为用户文风证据。",
+            [{"text": "这是系统生成的周记，不应作为用户文风证据。", "theme": "系统"}],
+        )
+        self.store.confirm(weekly["entry_id"])
+
+        context = self.store.cleaning_style_context(char_budget=4000)
+        self.assertTrue(context["has_new_samples"])
+        self.assertTrue(context["ready_for_review"])
+        self.assertEqual({item["id"] for item in context["samples"]}, set(confirmed_ids))
+        self.assertLessEqual(
+            sum(len(item["raw_text"]) + len(item["clean_text"] or "") for item in context["samples"]),
+            context["char_budget"],
+        )
+
+        profile = {
+            "summary": "偏好直接、紧凑的第一人称记录，保留自然的中英混用。",
+            "preserve": ["先结论后原因的叙述顺序", "自然的中英混用", "克制的情绪表达"],
+            "avoid": ["为了书面化而替换原词", "把短句合并成长句"],
+            "observations": [
+                {"trait": "叙述顺序", "evidence": "多个原始样本先写结果，再补充原因或感受。"},
+                {"trait": "中英混用", "evidence": "原始样本自然使用 English，且明确表示无需统一。"},
+            ],
+        }
+        saved = self.store.save_cleaning_style(profile, confirmed_ids)
+        self.assertEqual(saved["sample_count"], 3)
+        mirror = Path(saved["path"]).read_text(encoding="utf-8")
+        self.assertIn("自然的中英混用", mirror)
+        self.assertIn(confirmed_ids[0], mirror)
+
+        new_draft = self.store.create_draft("今天继续按自己的方式记录。", entry_date="2026-07-06")
+        self.assertEqual(new_draft["cleaning_style"]["profile"], profile)
+        after = self.store.cleaning_style_context()
+        self.assertFalse(after["has_new_samples"])
+        self.assertFalse(after["ready_for_review"])
+
+    def test_cleaning_style_rejects_insufficient_or_unconfirmed_evidence(self):
+        profile = {
+            "summary": "保持原文。",
+            "preserve": [],
+            "avoid": [],
+            "observations": [],
+        }
+        drafts = [
+            self.store.create_draft("尚未确认的样本。" * 20, entry_date=f"2026-07-0{index + 1}")["entry_id"]
+            for index in range(3)
+        ]
+        with self.assertRaisesRegex(ValueError, "confirmed non-weekly"):
+            self.store.save_cleaning_style(profile, drafts)
+
     def test_theme_governance_requires_confirmation_and_preserves_markdown(self):
         first = self.confirm_entry("今天散步并看了晚霞。", "2026-01-05", "远足")
         second = self.confirm_entry("整理户外装备。", "2026-01-06", "户外")
@@ -465,7 +538,7 @@ class DiaryStoreTests(unittest.TestCase):
                    WHERE s.entry_id=? AND st.theme_id=s.theme_id""",
                 (entry_id,),
             ).fetchone()[0]
-        self.assertTrue({"theme_change_proposals", "segment_tags", "goals", "goal_events", "goal_entry_links", "entry_goal_interpretations", "goal_change_proposals"}.issubset(tables))
+        self.assertTrue({"theme_change_proposals", "segment_tags", "goals", "goal_events", "goal_entry_links", "entry_goal_interpretations", "goal_change_proposals", "cleaning_style_profiles"}.issubset(tables))
         self.assertEqual(backfilled, 1)
 
     def test_default_personal_capture_guidance_and_no_external_semantic_dependency(self):

@@ -18,8 +18,9 @@ The broader trigger does not change the safety boundary: preserve the verbatim m
 1. Run `python .agents/skills/record-life-journal/scripts/journal.py --root . create-draft --text '<verbatim input>'` before interpreting the entry.
 2. Treat the returned `entry_id` as the only identifier for the turn.
 3. Use the returned routing decision and retrieved context. Do not scan the full journal tree.
-4. Use the returned `goal_context` after cleaning and classification. When it contains relevant Active goals, prepare compact goal interpretations before merging the preview; when it is empty, skip that semantic stage.
-5. Read [agent-protocol.md](references/agent-protocol.md) before producing or merging an analysis payload.
+4. Use the returned `cleaning_style` as a compact preservation guide. A style profile may prevent unnecessary edits; it never authorizes embellishment, normalization, or rewriting.
+5. Use the returned `goal_context` after cleaning and classification. When it contains relevant Active goals, prepare compact goal interpretations before merging the preview; when it is empty, skip that semantic stage.
+6. Read [agent-protocol.md](references/agent-protocol.md) before producing or merging an analysis payload.
 
 ## Route semantic work
 
@@ -37,10 +38,13 @@ Do not reveal hidden reasoning. Record only routing decisions, evidence links, a
 
 ## Clean conservatively
 
-- Remove non-semantic fillers such as `嗯`, `呃`, and repeated hesitation.
-- Repair punctuation, repeated fragments, and obvious sentence boundaries.
+- First decide whether the input is obviously speech-like. If it is not, default to `clean_text` matching the verbatim input; apart from trimming accidental outer whitespace, make no change merely to make the prose smoother or more standard.
+- Never beautify, formalize, replace words with synonyms, regularize intentional punctuation, or rewrite sentence structure. Do not erase the user's characteristic brevity, repetition, code-switching, colloquial wording, or narrative rhythm.
+- When obvious speech artifacts exist, remove only non-semantic fillers such as `嗯`, `呃`, and repeated hesitation, then repair only clearly broken punctuation, repeated fragments, or sentence boundaries.
+- Make the smallest edit that resolves the specific artifact. The absence of standard written style is not itself an artifact.
 - Preserve facts, negation, emotional intensity, uncertainty, voice, and chronology.
 - Flag uncertain people, terms, dates, numbers, and referents. Never silently guess them.
+- Use `cleaning_style` only when it is supported by confirmed original entries. When no profile exists or evidence is insufficient, fall back to verbatim preservation instead of inventing preferences.
 
 Use the deterministic local cleaner only as a starting candidate:
 
@@ -104,6 +108,17 @@ Read [agent-protocol.md](references/agent-protocol.md) before preparing change p
 - Treat SQLite as truth. Regenerate `memory/goals.md` only after confirmed goal changes. Never modify originals or silently rewrite confirmed cleaned Markdown when theme or goal state changes.
 
 ## Feedback and weekly skill improvement
+
+### Weekly cleaning-style calibration
+
+At Monday 02:00 Asia/Singapore, before reviewing workflow feedback:
+
+1. Run `cleaning-style-context`. It returns only bounded, newly confirmed non-weekly originals, their cleaning comparisons, and the current compact profile.
+2. Exit this stage without an agent call when `has_new_samples` is false. When `ready_for_review` is false, keep accumulating originals and do not infer a profile from insufficient evidence.
+3. When ready, infer only stable, observable habits from the verbatim originals: sentence length, punctuation, Chinese-English code-switching, degree of colloquialism, recurring wording, repetition, and narrative rhythm. Use clean/original differences only to detect over-cleaning.
+4. Keep the profile compact and evidence-backed. Record a `summary`, `preserve` items, `avoid` items, and observations shaped as `{trait, evidence}`. Do not store speculative personality claims or treat a one-off phrase as a lasting preference.
+5. Run `save-cleaning-style` with the profile and every source entry id used. This updates `memory/cleaning-style.md` and the SQLite audit record without rewriting any original or confirmed cleaned journal.
+6. Future captures receive the latest profile through `create-draft`; it remains subordinate to the current verbatim input and the preview-confirm boundary.
 
 - When the user reports friction, a new need, a bad question, or a workflow preference, immediately run `add-feedback`.
 - At Monday 02:00 Asia/Singapore, run `feedback-review-context`; exit without an agent call when `has_feedback` is false.
