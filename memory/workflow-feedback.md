@@ -25,3 +25,8 @@
 - ID: `dd9a1448-cb9c-4895-94c9-2cd26e9ea09f`
 - Automatically match every diary entry against relevant active goals during the normal capture flow and provide concise goal-related feedback without an extra interaction. Preserve the cleaned journal as the user's wording, append a clearly labeled AI goal interpretation section to the preview and confirmed cleaned Markdown, and make the structured interpretations available to weekly review. The user should be able to correct or remove the interpretation before confirming the entry.
 
+## 2026-07-14T13:09:59+08:00 [workflow_preference]
+
+- ID: `806ac4cd-9c4d-400f-9c52-2dbe3233f61b`
+- After every weekly review generation or implementation of a workflow revision, commit the complete repository state and push the current branch so no generated or implemented changes remain only local.
+

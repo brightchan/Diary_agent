@@ -45,6 +45,10 @@ def parser() -> argparse.ArgumentParser:
     preview.add_argument("--uncertainties")
     preview.add_argument("--links")
     preview.add_argument("--followups")
+    preview.add_argument(
+        "--goal-interpretations",
+        help="JSON string or file with AI goal interpretations shown in this preview",
+    )
 
     confirm = commands.add_parser("confirm")
     confirm.add_argument("--entry-id", required=True)
@@ -128,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
                 load_json(args.uncertainties, []),
                 load_json(args.links, []),
                 load_json(args.followups, []),
+                load_json(args.goal_interpretations, []),
             )
         elif args.command == "confirm":
             result = store.confirm(args.entry_id)
@@ -177,4 +182,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

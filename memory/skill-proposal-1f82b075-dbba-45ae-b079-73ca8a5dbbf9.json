@@ -1,0 +1,16 @@
+{
+  "feedback_ids": [
+    "806ac4cd-9c4d-400f-9c52-2dbe3233f61b"
+  ],
+  "problem_summary": "Weekly review generation and completed workflow revisions can create committed local state without publishing it, leaving the remote repository behind and making the audit trail incomplete outside the current machine.",
+  "impact": "Weekly review artifacts, SQLite changes, journals, workflow code, tests, and revision audit metadata may remain local even though the workflow appears complete.",
+  "proposed_diff": "1. Require every generated weekly journal review and completed weekly skill-improvement review to publish the complete repository state. 2. Add a standard-library git-publish core operation and CLI command that checkpoints SQLite WAL, stages all files, commits when needed, detects the branch/upstream or establishes origin as upstream, and pushes. Treat push failure as incomplete. 3. Make propose-skill-revision publish proposal and audit commits, and make terminal workflow-revision outcomes publish implementation and final audit commits. 4. Update SKILL.md, AGENTS.md, and skill-improvement guidance. 5. Add local bare-remote tests for proposal, weekly-review, and applied-revision publication.",
+  "compatibility": "Configured upstreams remain unchanged; origin is used only when no upstream exists. Missing remotes, detached HEAD, or rejected pushes fail explicitly. No API client or non-standard dependency is added.",
+  "tests": [
+    "Run the approved conda pytest suite.",
+    "Run skill-creator quick_validate.py.",
+    "Verify proposal, weekly-review, and applied-revision commits reach a local bare remote.",
+    "Verify missing remote and detached branch failures are explicit."
+  ],
+  "token_cost_change": "neutral: deterministic Git operations and concise instructions add no semantic-agent context."
+}

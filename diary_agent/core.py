@@ -150,6 +150,20 @@ CREATE TABLE IF NOT EXISTS goal_entry_links (
     UNIQUE(goal_id, entry_id, relation, evidence)
 );
 
+CREATE TABLE IF NOT EXISTS entry_goal_interpretations (
+    id TEXT PRIMARY KEY,
+    entry_id TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+    goal_id TEXT NOT NULL REFERENCES goals(id),
+    goal_title TEXT NOT NULL,
+    relation TEXT NOT NULL CHECK(relation IN ('progress','blocker','reflection','related')),
+    evidence TEXT NOT NULL,
+    interpretation TEXT NOT NULL,
+    feedback TEXT NOT NULL,
+    confidence REAL NOT NULL CHECK(confidence >= 0 AND confidence <= 1),
+    created_at TEXT NOT NULL,
+    UNIQUE(entry_id, goal_id, relation, evidence)
+);
+
 CREATE TABLE IF NOT EXISTS goal_change_proposals (
     id TEXT PRIMARY KEY,
     action TEXT NOT NULL CHECK(action IN ('create','update','complete','pause','abandon','activate','link_entry')),
@@ -204,6 +218,8 @@ CREATE INDEX IF NOT EXISTS idx_theme_changes_status ON theme_change_proposals(st
 CREATE INDEX IF NOT EXISTS idx_goals_status_scope ON goals(status, scope, priority);
 CREATE INDEX IF NOT EXISTS idx_goal_events_goal_created ON goal_events(goal_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_goal_links_goal_created ON goal_entry_links(goal_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_goal_interpretations_goal_entry
+    ON entry_goal_interpretations(goal_id, entry_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_goal_changes_status ON goal_change_proposals(status, created_at);
 """
 
@@ -363,12 +379,19 @@ class DiaryStore:
         self._write_original(original_path, entry_id, date_text, entry_type, "draft", text)
         draft_file = self.paths.drafts / f"{entry_id}.json"
         draft_file.write_text(_json({"entry_id": entry_id, "status": "draft", "created_at": now}), encoding="utf-8")
-        routing = self.route(text)
         context = self.retrieve_context(text)
+        goal_context = self.conversation_context(text, token_budget=500)
+        routing = self.route(text, relevant_goal_count=len(goal_context["goals"]))
         self.log_agent_run(entry_id, routing, sum(len(item["text"]) for item in context), 0)
-        return {"entry_id": entry_id, "entry_date": date_text, "routing_decision": routing, "context": context}
+        return {
+            "entry_id": entry_id,
+            "entry_date": date_text,
+            "routing_decision": routing,
+            "context": context,
+            "goal_context": goal_context,
+        }
 
-    def route(self, text: str) -> dict[str, Any]:
+    def route(self, text: str, relevant_goal_count: int = 0) -> dict[str, Any]:
         filler_count = len(FILLER_RE.findall(text))
         punctuation = sum(text.count(mark) for mark in "，。！？；,.!?;")
         speech_like = filler_count >= 1 or (len(text) > 120 and punctuation <= 1)
@@ -376,11 +399,12 @@ class DiaryStore:
         uncertain = bool(UNCERTAINTY_RE.search(text))
         continuity = bool(CONTINUITY_RE.search(text))
         return {
-            "stages": {"clean": True, "classify": True, "continuity": True},
+            "stages": {"clean": True, "classify": True, "continuity": True, "goal_interpretation": True},
             "delegate": {
                 "cleaner": speech_like or uncertain,
                 "classifier": multi_topic,
                 "continuity": continuity,
+                "goal_interpreter": relevant_goal_count > 0,
             },
             "signals": {
                 "filler_count": filler_count,
@@ -388,11 +412,13 @@ class DiaryStore:
                 "multi_topic": multi_topic,
                 "uncertain_term": uncertain,
                 "continuation_language": continuity,
+                "relevant_goal_count": relevant_goal_count,
             },
             "model_preference": {
                 "cleaner": "lightweight_if_supported",
                 "classifier": "lightweight_if_supported",
                 "continuity": "capable",
+                "goal_interpreter": "capable",
                 "orchestrator": "capable",
             },
         }
@@ -477,7 +503,16 @@ class DiaryStore:
                 break
         return selected
 
-    def save_preview(self, entry_id: str, clean_text: str, segments: list[dict[str, Any]], uncertainties: list[dict[str, Any]] | None = None, links: list[dict[str, Any]] | None = None, followups: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    def save_preview(
+        self,
+        entry_id: str,
+        clean_text: str,
+        segments: list[dict[str, Any]],
+        uncertainties: list[dict[str, Any]] | None = None,
+        links: list[dict[str, Any]] | None = None,
+        followups: list[dict[str, Any]] | None = None,
+        goal_interpretations: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         self.initialize()
         clean = clean_text.strip()
         if not clean:
@@ -500,19 +535,26 @@ class DiaryStore:
                     tags.append(tag)
                     seen.add(normalized)
             normalized_segments.append({"position": position, "text": text, "theme": theme, "tags": tags})
-        preview = {
-            "clean_text": clean,
-            "segments": normalized_segments,
-            "uncertainties": uncertainties or [],
-            "links": links or [],
-            "followups": followups or [],
-        }
         with self.connect() as db:
-            current = db.execute("SELECT status FROM entries WHERE id=?", (entry_id,)).fetchone()
+            current = db.execute("SELECT id,status,raw_text FROM entries WHERE id=?", (entry_id,)).fetchone()
             if not current:
                 raise KeyError(entry_id)
             if current["status"] == "confirmed":
                 raise ValueError("confirmed entries cannot be overwritten through preview")
+            normalized_goal_interpretations = self._validate_goal_interpretations(
+                db,
+                current,
+                clean,
+                goal_interpretations or [],
+            )
+            preview = {
+                "clean_text": clean,
+                "segments": normalized_segments,
+                "uncertainties": uncertainties or [],
+                "links": links or [],
+                "followups": followups or [],
+                "goal_interpretations": normalized_goal_interpretations,
+            }
             db.execute("UPDATE entries SET status='preview',clean_text=?,preview_json=?,updated_at=? WHERE id=?", (clean, _json(preview), _iso(), entry_id))
             db.commit()
         (self.paths.drafts / f"{entry_id}.json").write_text(_json({"entry_id": entry_id, "status": "preview", "preview": preview}), encoding="utf-8")
@@ -529,6 +571,13 @@ class DiaryStore:
             if row["status"] != "preview" or not row["clean_text"]:
                 raise ValueError("entry must have a preview before confirmation")
             preview = json.loads(row["preview_json"])
+            goal_interpretations = self._validate_goal_interpretations(
+                db,
+                row,
+                str(row["clean_text"]),
+                preview.get("goal_interpretations") or [],
+            )
+            preview["goal_interpretations"] = goal_interpretations
             db.execute("DELETE FROM segments WHERE entry_id=?", (entry_id,))
             theme_names = []
             stored_segments = []
@@ -563,6 +612,25 @@ class DiaryStore:
                         "INSERT INTO segment_tags(segment_id,theme_id,created_at) VALUES(?,?,?)",
                         (segment_id, tagged_theme_id, _iso()),
                     )
+            db.execute("DELETE FROM entry_goal_interpretations WHERE entry_id=?", (entry_id,))
+            for interpretation in goal_interpretations:
+                db.execute(
+                    """INSERT INTO entry_goal_interpretations
+                       (id,entry_id,goal_id,goal_title,relation,evidence,interpretation,feedback,confidence,created_at)
+                       VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        str(uuid.uuid4()),
+                        entry_id,
+                        interpretation["goal_id"],
+                        interpretation["goal_title"],
+                        interpretation["relation"],
+                        interpretation["evidence"],
+                        interpretation["interpretation"],
+                        interpretation["feedback"],
+                        interpretation["confidence"],
+                        _iso(),
+                    ),
+                )
             for link in preview.get("links", []):
                 target = str(link.get("target_entry_id", ""))
                 if target and db.execute("SELECT 1 FROM entries WHERE id=?", (target,)).fetchone():
@@ -669,6 +737,14 @@ class DiaryStore:
             goal_parts.extend(str(item.get(key) or "") for key in ("title", "description", "success_criteria"))
             for evidence in item.get("weekly_evidence", []):
                 goal_parts.extend([str(evidence.get("evidence") or ""), str(evidence.get("clean_text") or "")])
+            for interpretation in item.get("weekly_interpretations", []):
+                goal_parts.extend(
+                    [
+                        str(interpretation.get("evidence") or ""),
+                        str(interpretation.get("interpretation") or ""),
+                        str(interpretation.get("feedback") or ""),
+                    ]
+                )
             for event in item.get("weekly_events", []):
                 goal_parts.extend([_json(event.get("payload") or {}), _json(event.get("evidence") or [])])
         goal_text = " ".join(goal_parts)
@@ -1081,6 +1157,65 @@ class DiaryStore:
             used += size
         return {"has_context": bool(selected), "query": text, "goals": selected}
 
+    def _validate_goal_interpretations(
+        self,
+        db: sqlite3.Connection,
+        entry: sqlite3.Row,
+        clean_text: str,
+        interpretations: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if not isinstance(interpretations, (list, tuple)):
+            raise ValueError("goal_interpretations must be a list")
+        normalized: list[dict[str, Any]] = []
+        seen: set[tuple[str, str, str]] = set()
+        entry_text = f"{entry['raw_text']}\n{clean_text}".strip()
+        field_limits = {"evidence": 500, "interpretation": 500, "feedback": 300}
+        for item in interpretations:
+            if not isinstance(item, dict):
+                raise ValueError("each goal interpretation must be an object")
+            goal_id = str(item.get("goal_id") or "").strip()
+            goal = db.execute("SELECT id,title,status FROM goals WHERE id=?", (goal_id,)).fetchone()
+            if not goal:
+                raise ValueError(f"unknown goal for interpretation: {goal_id or '<missing>'}")
+            if goal["status"] != "active":
+                raise ValueError(f"goal interpretation requires an active goal: {goal_id}")
+            relation = str(item.get("relation") or "").strip()
+            if relation not in {"progress", "blocker", "reflection", "related"}:
+                raise ValueError(f"invalid goal interpretation relation: {relation or '<missing>'}")
+            fields = {name: str(item.get(name) or "").strip() for name in field_limits}
+            for name, limit in field_limits.items():
+                if not fields[name]:
+                    raise ValueError(f"goal interpretation requires {name}")
+                if len(fields[name]) > limit:
+                    raise ValueError(f"goal interpretation {name} exceeds {limit} characters")
+            evidence_normalized = _normalize(fields["evidence"])
+            entry_normalized = _normalize(entry_text)
+            faithful_score = _cosine(_ngrams(fields["evidence"]), _ngrams(entry_text))
+            if evidence_normalized not in entry_normalized and faithful_score < 0.18:
+                raise ValueError("goal interpretation evidence must come from the current entry")
+            confidence = item.get("confidence")
+            if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+                raise ValueError("goal interpretation confidence must be a number from 0 to 1")
+            confidence_value = float(confidence)
+            if not math.isfinite(confidence_value) or not 0 <= confidence_value <= 1:
+                raise ValueError("goal interpretation confidence must be a number from 0 to 1")
+            key = (goal_id, relation, evidence_normalized)
+            if key in seen:
+                raise ValueError("duplicate goal interpretation")
+            seen.add(key)
+            normalized.append(
+                {
+                    "goal_id": goal_id,
+                    "goal_title": str(goal["title"])[:200],
+                    "relation": relation,
+                    **fields,
+                    "confidence": confidence_value,
+                    "ai_generated": True,
+                    "authoritative": False,
+                }
+            )
+        return normalized
+
     def _decode_proposal(self, row: sqlite3.Row) -> dict[str, Any]:
         item = dict(row)
         item["payload"] = json.loads(item.pop("payload_json") or "{}")
@@ -1378,8 +1513,24 @@ class DiaryStore:
                    WHERE l.goal_id=? AND e.entry_date BETWEEN ? AND ? ORDER BY e.entry_date""",
                 (row["id"], start, end),
             ).fetchall()
+            interpretations = db.execute(
+                """SELECT i.entry_id,i.goal_title AS goal_title_snapshot,i.relation,i.evidence,
+                          i.interpretation,i.feedback,i.confidence,i.created_at,e.entry_date
+                   FROM entry_goal_interpretations i JOIN entries e ON e.id=i.entry_id
+                   WHERE i.goal_id=? AND e.status='confirmed' AND e.entry_date BETWEEN ? AND ?
+                   ORDER BY e.entry_date,i.created_at""",
+                (row["id"], start, end),
+            ).fetchall()
             events = db.execute("SELECT event_type,payload_json,evidence_json,created_at FROM goal_events WHERE goal_id=? AND substr(created_at,1,10) BETWEEN ? AND ? ORDER BY created_at", (row["id"], start, end)).fetchall()
             item["weekly_evidence"] = [dict(value) for value in evidence]
+            item["weekly_interpretations"] = [
+                {
+                    **dict(value),
+                    "source_type": "ai_goal_interpretation",
+                    "authoritative": False,
+                }
+                for value in interpretations
+            ]
             item["weekly_events"] = [{**dict(value), "payload": json.loads(value["payload_json"] or "{}"), "evidence": json.loads(value["evidence_json"] or "[]")} for value in events]
             for event in item["weekly_events"]:
                 event.pop("payload_json", None)
@@ -1585,6 +1736,35 @@ class DiaryStore:
             if segment.get("tags"):
                 lines.extend([f"Tags: {', '.join(segment['tags'])}", ""])
             lines.extend([segment["text"], ""])
+        if preview.get("goal_interpretations"):
+            labels = {
+                "progress": "进展",
+                "blocker": "阻碍",
+                "reflection": "反思",
+                "related": "相关",
+            }
+            lines.extend(
+                [
+                    "## AI 目标解读（AI goal interpretation）",
+                    "",
+                    "以下内容由 AI 根据本条日记证据生成，并非用户原话或权威目标记录。",
+                    "",
+                ]
+            )
+            for item in preview["goal_interpretations"]:
+                relation = labels.get(str(item["relation"]), str(item["relation"]))
+                lines.extend(
+                    [
+                        f"### {item['goal_title']}",
+                        "",
+                        f"- 关系：{relation}",
+                        f"- 日记证据：{item['evidence']}",
+                        f"- AI 解读：{item['interpretation']}",
+                        f"- AI 反馈：{item['feedback']}",
+                        f"- 置信度：{item['confidence']:.2f}",
+                        "",
+                    ]
+                )
         if preview.get("followups"):
             lines.extend(["## 反思问题", ""])
             lines.extend(f"- {item['question']}" for item in preview["followups"] if item.get("question"))

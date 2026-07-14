@@ -30,11 +30,20 @@ class DiaryStoreTests(unittest.TestCase):
         self.store.confirm(draft["entry_id"])
         return draft["entry_id"]
 
+    def create_goal(self, title: str, description: str = "", scope: str = "weekly") -> str:
+        preview = self.store.goal_change_preview(
+            [{"action": "create", "payload": {"scope": scope, "title": title, "description": description}}]
+        )
+        result = self.store.apply_goal_changes(
+            [{"proposal_id": preview["proposals"][0]["proposal_id"], "decision": "approved"}]
+        )
+        return result["results"][0]["goal_id"]
+
     def test_draft_preview_confirm_and_idempotency(self):
         draft = self.store.create_draft("嗯，今天我继续整理日记系统。另外也去跑步了。")
         self.assertEqual(
             draft["routing_decision"]["stages"],
-            {"clean": True, "classify": True, "continuity": True},
+            {"clean": True, "classify": True, "continuity": True, "goal_interpretation": True},
         )
         self.assertTrue(draft["routing_decision"]["delegate"]["cleaner"])
         original = next((self.root / "journals" / "originals").rglob("*.md"))
@@ -330,6 +339,104 @@ class DiaryStoreTests(unittest.TestCase):
         weekly = self.store.weekly_context(datetime(2026, 7, 13, 1, 0, tzinfo=TZ))
         self.assertTrue(any(item["id"] == short_goal["id"] for item in weekly["goals"]))
 
+    def test_capture_returns_only_relevant_active_goal_context(self):
+        no_goals = self.store.create_draft("今天完成了跑步训练。", entry_date="2026-07-07")
+        self.assertFalse(no_goals["goal_context"]["has_context"])
+        self.assertEqual(no_goals["goal_context"]["goals"], [])
+        self.assertFalse(no_goals["routing_decision"]["delegate"]["goal_interpreter"])
+
+        running_goal_id = self.create_goal("本周跑步三次", "提升跑步耐力和呼吸稳定性")
+        reading_goal_id = self.create_goal("读完一本历史书", "整理阅读笔记")
+        relevant = self.store.create_draft(
+            "今天完成了第二次跑步训练，呼吸比上次稳定。",
+            entry_date="2026-07-08",
+        )
+        selected_ids = {item["id"] for item in relevant["goal_context"]["goals"]}
+        self.assertIn(running_goal_id, selected_ids)
+        self.assertNotIn(reading_goal_id, selected_ids)
+        self.assertTrue(relevant["routing_decision"]["delegate"]["goal_interpreter"])
+        self.assertEqual(relevant["routing_decision"]["signals"]["relevant_goal_count"], 1)
+
+    def test_goal_interpretation_validation_confirmation_and_weekly_context(self):
+        active_goal_id = self.create_goal("本周跑步三次", "逐步恢复跑步训练")
+        inactive_goal_id = self.create_goal("暂停的力量训练")
+        pause = self.store.goal_change_preview([{"action": "pause", "goal_id": inactive_goal_id}])
+        self.store.apply_goal_changes(
+            [{"proposal_id": pause["proposals"][0]["proposal_id"], "decision": "approved"}]
+        )
+        text = "本周完成了第二次跑步训练，虽然很累但坚持下来了。"
+        draft = self.store.create_draft(text, entry_date="2026-07-08")
+        segments = [{"text": text, "theme": "运动"}]
+        interpretation = {
+            "goal_id": active_goal_id,
+            "goal_title": "不应信任调用方提供的标题",
+            "relation": "progress",
+            "evidence": "完成了第二次跑步训练",
+            "interpretation": "这是本周跑步次数的直接进展。",
+            "feedback": "已推进目标；注意疲劳并安排恢复。",
+            "confidence": 0.92,
+        }
+
+        invalid_payloads = [
+            {**interpretation, "goal_id": "missing-goal"},
+            {**interpretation, "goal_id": inactive_goal_id},
+            {**interpretation, "relation": "achievement"},
+            {**interpretation, "confidence": 1.1},
+            {**interpretation, "confidence": "high"},
+            {**interpretation, "evidence": "阅读了一本完全无关的历史书"},
+        ]
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                self.store.save_preview(draft["entry_id"], text, segments, goal_interpretations=[payload])
+
+        first = self.store.save_preview(
+            draft["entry_id"], text, segments, goal_interpretations=[interpretation]
+        )
+        normalized = first["preview"]["goal_interpretations"][0]
+        self.assertEqual(normalized["goal_title"], "本周跑步三次")
+        self.assertTrue(normalized["ai_generated"])
+        self.assertFalse(normalized["authoritative"])
+        removed = self.store.save_preview(
+            draft["entry_id"], text, segments, goal_interpretations=[]
+        )
+        self.assertEqual(removed["preview"]["goal_interpretations"], [])
+        corrected = {
+            **interpretation,
+            "feedback": "这是明确进展，同时应在下一次训练前恢复。",
+        }
+        self.store.save_preview(
+            draft["entry_id"], text, segments, goal_interpretations=[corrected]
+        )
+
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM entry_goal_interpretations").fetchone()[0], 0)
+            event_count = db.execute("SELECT count(*) FROM goal_events").fetchone()[0]
+            link_count = db.execute("SELECT count(*) FROM goal_entry_links").fetchone()[0]
+            statuses = dict(db.execute("SELECT id,status FROM goals").fetchall())
+        result = self.store.confirm(draft["entry_id"])
+        clean_markdown = Path(result["clean_path"]).read_text(encoding="utf-8")
+        self.assertIn("AI goal interpretation", clean_markdown)
+        self.assertIn("并非用户原话或权威目标记录", clean_markdown)
+        self.assertIn(corrected["feedback"], clean_markdown)
+        with self.store.connect() as db:
+            row = db.execute("SELECT * FROM entry_goal_interpretations").fetchone()
+            entry = db.execute("SELECT raw_text,clean_text FROM entries WHERE id=?", (draft["entry_id"],)).fetchone()
+            self.assertEqual(row["goal_id"], active_goal_id)
+            self.assertEqual(row["feedback"], corrected["feedback"])
+            self.assertEqual(tuple(entry), (text, text))
+            self.assertEqual(db.execute("SELECT count(*) FROM goal_events").fetchone()[0], event_count)
+            self.assertEqual(db.execute("SELECT count(*) FROM goal_entry_links").fetchone()[0], link_count)
+            self.assertEqual(dict(db.execute("SELECT id,status FROM goals").fetchall()), statuses)
+
+        weekly = self.store.weekly_context(datetime(2026, 7, 13, 1, 0, tzinfo=TZ))
+        active_goal = next(item for item in weekly["goals"] if item["id"] == active_goal_id)
+        self.assertEqual(active_goal["weekly_evidence"], [])
+        self.assertEqual(len(active_goal["weekly_interpretations"]), 1)
+        weekly_interpretation = active_goal["weekly_interpretations"][0]
+        self.assertEqual(weekly_interpretation["entry_id"], draft["entry_id"])
+        self.assertEqual(weekly_interpretation["source_type"], "ai_goal_interpretation")
+        self.assertFalse(weekly_interpretation["authoritative"])
+
     def test_initialize_migration_is_idempotent_and_preserves_journals(self):
         entry_id = self.confirm_entry("迁移不能改写日记。", "2026-06-01", "系统")
         original = next((self.root / "journals" / "originals").rglob(f"*{entry_id}.md"))
@@ -348,7 +455,7 @@ class DiaryStoreTests(unittest.TestCase):
                    WHERE s.entry_id=? AND st.theme_id=s.theme_id""",
                 (entry_id,),
             ).fetchone()[0]
-        self.assertTrue({"theme_change_proposals", "segment_tags", "goals", "goal_events", "goal_entry_links", "goal_change_proposals"}.issubset(tables))
+        self.assertTrue({"theme_change_proposals", "segment_tags", "goals", "goal_events", "goal_entry_links", "entry_goal_interpretations", "goal_change_proposals"}.issubset(tables))
         self.assertEqual(backfilled, 1)
 
     def test_default_personal_capture_guidance_and_no_external_semantic_dependency(self):
