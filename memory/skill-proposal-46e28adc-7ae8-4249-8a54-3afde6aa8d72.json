@@ -1,0 +1,18 @@
+{
+  "feedback_ids": [
+    "c1d84396-8e5a-4cc5-957c-eeee9034f8ad"
+  ],
+  "problem_summary": "现有清洗规则会对并不明显口语化的输入做不必要修改，也没有基于用户原始输入持续校准清洗语言风格。",
+  "impact": "可能削弱用户原有文风、措辞习惯和真实表达，使清洗稿显得过度书面化或不像用户本人。",
+  "proposed_diff": "1. 在 Skill 和 cleaner protocol 中规定：非明显口语输入默认 clean_text 与原文一致，仅允许必要的空白处理；禁止润色、书面化、同义替换和句式重写，任何非机械性修改须在预览中可见。2. 增加本地 cleaning-style-context 与 save-cleaning-style 工作流：每周从新增的已确认原始输入及其清洗对照中提炼稳定的句长、标点、中英混用、口语程度、常用措辞和叙述节奏，持久化为 memory/cleaning-style.md，并记录证据范围。3. create-draft 返回当前文风档案供清洗阶段使用；没有足够样本时保持保守默认，不臆造风格。4. 不修改任何已确认原文或清洗稿；增加 CLI、存储迁移和测试覆盖。",
+  "compatibility": "保持现有 draft-preview-confirm、原文留存、主题/目标和检索行为兼容；新增字段与表采用增量迁移，旧数据库和没有文风档案的仓库继续工作。",
+  "tests": [
+    "非口语输入的确定性清洗保持原文",
+    "明显填充词仍可做最小清洗",
+    "文风上下文只取已确认原始输入且有界",
+    "保存后新草稿返回文风档案",
+    "未有足够样本时不生成虚构风格",
+    "pytest 全套与 quick_validate 通过"
+  ],
+  "token_cost_change": "small increase: each capture receives only a compact persisted style profile; weekly calibration uses bounded new samples, while reduced cleaner delegation offsets routine cost."
+}

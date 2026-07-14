@@ -30,3 +30,8 @@
 - ID: `806ac4cd-9c4d-400f-9c52-2dbe3233f61b`
 - After every weekly review generation or implementation of a workflow revision, commit the complete repository state and push the current branch so no generated or implemented changes remain only local.
 
+## 2026-07-14T15:50:48+08:00 [workflow_preference]
+
+- ID: `c1d84396-8e5a-4cc5-957c-eeee9034f8ad`
+- 如果输入内容口语化不明显，应减少清洗和修改，尽量按原文记录；并应定期根据原始输入归纳清洗语言风格，使清洗结果保留我的文风和语言习惯。
+
