@@ -49,6 +49,28 @@ Preserve narrative order. `theme` is required. `tags` is optional, deduplicated,
 
 Ordinary diary output may contain at most one follow-up. Weekly output may contain 2-5.
 
+## Goal-interpretation output
+
+Use only the locally filtered Active goals returned in `goal_context`. If it is empty, return no goal interpretations and skip semantic goal analysis.
+
+```json
+{
+  "goal_interpretations": [
+    {
+      "goal_id": "active goal uuid",
+      "goal_title": "display snapshot",
+      "relation": "progress|blocker|reflection|related",
+      "evidence": "exact or faithful evidence from the current entry",
+      "interpretation": "concise evidence-based interpretation",
+      "feedback": "concise goal-related feedback",
+      "confidence": 0.0
+    }
+  ]
+}
+```
+
+These are AI-generated analytical annotations, not user-authored facts, `goal_events`, or authoritative `goal_entry_links`. They must not create or mutate goals. The user may correct or remove them in the normal diary preview.
+
 ## Merged preview
 
 Pass arrays to `save-preview` as JSON strings or files:
@@ -58,7 +80,8 @@ python .agents/skills/record-life-journal/scripts/journal.py --root . save-previ
   --entry-id '<uuid>' \
   --clean-text '<preview text>' \
   --segments '[{"text":"...","theme":"...","tags":["..."]}]' \
-  --uncertainties '[]' --links '[]' --followups '[]'
+  --uncertainties '[]' --links '[]' --followups '[]' \
+  --goal-interpretations '[{"goal_id":"...","relation":"progress","evidence":"...","interpretation":"...","feedback":"...","confidence":0.9}]'
 ```
 
 Do not include chain-of-thought or full historical records.

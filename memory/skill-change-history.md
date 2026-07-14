@@ -40,3 +40,8 @@
 - Revision: `01d618c9-f217-4179-858c-fa3f90eccad8`
 - Tests: not supplied
 
+## 2026-07-14T13:11:36+08:00 approved
+
+- Revision: `1f82b075-dbba-45ae-b079-73ca8a5dbbf9`
+- Tests: User explicitly requested immediate implementation of this exact workflow publication rule.
+
