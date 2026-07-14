@@ -1,0 +1,15 @@
+{
+  "feedback_ids": [
+    "fa49726d-d2b1-4cff-8114-472dfeffc9b9"
+  ],
+  "problem_summary": "目标模型只有 life、short_term、weekly，缺少用户要求的按年规划 long_term 层级，也没有明确 short_term 必须面向一年内完成。",
+  "impact": "无法区分人生方向、以年为单位的长期目标与一年内短期目标，目标层级、Markdown 镜像和代理指引会混淆这些时间尺度。",
+  "proposed_diff": "新增 long_term scope，形成 life -> long_term -> short_term -> weekly 的有序层级；life 保留为无固定期限的人生方向，long_term 定义为以一年或多年为规划单位，short_term 定义为计划在一年内完成，weekly 保持周目标。更新目标创建与父子层级校验、goals.md 分组与标签、Skill 描述和目标治理指引、storage schema、agent protocol、README 与测试。允许子目标直接挂在任意更宽 scope 下以兼容既有数据；不改写已有 goal 记录，不修改确认日记。",
+  "compatibility": "向后兼容：保留现有 life、short_term、weekly 值和既有父子关系；SQLite scope 为文本字段，无需破坏性迁移。新增 long_term 仅扩展允许值与排序。",
+  "tests": [
+    "新增四层 life/long_term/short_term/weekly 创建、父子关系、上下层非法关系及 goals.md Long-term 分组测试",
+    "运行 /mnt/d/Project_PA/condaenv_host/bin/python -m pytest",
+    "运行 skill-creator quick_validate.py .agents/skills/record-life-journal"
+  ],
+  "token_cost_change": "neutral：仅增加一个目标 scope 和简短时间边界说明，不引入新的检索或模型调用。"
+}

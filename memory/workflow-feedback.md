@@ -35,3 +35,8 @@
 - ID: `c1d84396-8e5a-4cc5-957c-eeee9034f8ad`
 - 如果输入内容口语化不明显，应减少清洗和修改，尽量按原文记录；并应定期根据原始输入归纳清洗语言风格，使清洗结果保留我的文风和语言习惯。
 
+## 2026-07-14T16:17:10+08:00 [feature_request]
+
+- ID: `fa49726d-d2b1-4cff-8114-472dfeffc9b9`
+- 目标分类需要新增 long_term：long-term 目标以年为时间单位；short_term 目标应在一年内完成。保留 life 与 weekly，并让目标层级和文档明确支持 life -> long_term -> short_term -> weekly。
+
