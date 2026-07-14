@@ -89,6 +89,7 @@ At Monday 01:00 Asia/Singapore:
 6. Ask an optional historical reflection question only when `reflection_prompt_candidate` is present and its cited historical segment supports the question.
 7. Include goal-adjustment drafts and theme-governance suggestions as separate review items. Never apply them through weekly-journal confirmation.
 8. Add 2-5 optional questions and wait for confirmation before final storage.
+9. Immediately after generating and saving the weekly review preview, run `git-publish` with a period-specific message. Publish again after confirmation or any later correction changes repository state. Do not report the review generation or confirmation complete until the push succeeds.
 
 ## Govern themes and goals
 
@@ -107,8 +108,9 @@ Read [agent-protocol.md](references/agent-protocol.md) before preparing change p
 - When the user reports friction, a new need, a bad question, or a workflow preference, immediately run `add-feedback`.
 - At Monday 02:00 Asia/Singapore, run `feedback-review-context`; exit without an agent call when `has_feedback` is false.
 - For feedback, read [skill-improvement.md](references/skill-improvement.md), produce a reviewable proposal, and run `propose-skill-revision`.
-- Proposal creation automatically commits the complete repository state, including `data/diary.sqlite3` and every diary Markdown file.
+- Proposal creation automatically commits and pushes the complete repository state, including `data/diary.sqlite3` and every diary Markdown file.
 - Never modify the active Skill from a proposal alone. Apply only after explicit user approval, validate and test, then run `mark-skill-revision --status applied`.
+- A terminal revision result commits and pushes the implementation plus audit metadata. If a push fails after the local commits succeed, preserve them and retry with `git-publish`; do not report the revision complete until the push succeeds.
 
 ## Token discipline
 

@@ -1598,7 +1598,15 @@ class DiaryStore:
         # The commit itself contains the database state before git_before_commit is written;
         # persist that audit pointer in a small follow-up metadata commit.
         metadata_commit = self.git_snapshot(f"chore(diary): record proposal snapshot {revision_id[:8]}")
-        return {"revision_id": revision_id, "status": "proposed", "snapshot_commit": commit, "metadata_commit": metadata_commit, "proposal_path": str(proposal_path)}
+        push = self.git_push_current_branch()
+        return {
+            "revision_id": revision_id,
+            "status": "proposed",
+            "snapshot_commit": commit,
+            "metadata_commit": metadata_commit,
+            "push": push,
+            "proposal_path": str(proposal_path),
+        }
 
     def mark_skill_revision(self, revision_id: str, status: str, test_summary: str = "") -> dict[str, Any]:
         if status not in {"approved", "applied", "rejected", "failed"}:
@@ -1613,13 +1621,22 @@ class DiaryStore:
         with history.open("a", encoding="utf-8") as handle:
             handle.write(f"## {_iso()} {status}\n\n- Revision: `{revision_id}`\n- Tests: {test_summary or 'not supplied'}\n\n")
         commit = None
+        metadata_commit = None
+        push = None
         if status in {"applied", "failed", "rejected"}:
             commit = self.git_snapshot(f"chore(diary): {status} skill revision {revision_id[:8]}")
             with self.connect() as db:
                 db.execute("UPDATE skill_revisions SET git_after_commit=?,updated_at=? WHERE id=?", (commit, _iso(), revision_id))
                 db.commit()
-            self.git_snapshot(f"chore(diary): record revision result {revision_id[:8]}")
-        return {"revision_id": revision_id, "status": status, "commit": commit}
+            metadata_commit = self.git_snapshot(f"chore(diary): record revision result {revision_id[:8]}")
+            push = self.git_push_current_branch()
+        return {
+            "revision_id": revision_id,
+            "status": status,
+            "commit": commit,
+            "metadata_commit": metadata_commit,
+            "push": push,
+        }
 
     def search(self, query: str, token_budget: int = 1800) -> list[dict[str, Any]]:
         return self.retrieve_context(query, token_budget=token_budget)
@@ -1670,6 +1687,77 @@ class DiaryStore:
         result = subprocess.run(["git", "commit", "-m", message], cwd=self.paths.root, check=True, capture_output=True, text=True)
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.paths.root, check=True, capture_output=True, text=True)
         return head.stdout.strip()
+
+    def git_push_current_branch(self) -> dict[str, str]:
+        """Push HEAD to its upstream, establishing origin when needed."""
+        branch_result = subprocess.run(
+            ["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
+            cwd=self.paths.root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        branch = branch_result.stdout.strip()
+        if branch_result.returncode != 0 or not branch:
+            raise RuntimeError("cannot publish diary changes from a detached Git HEAD")
+
+        upstream = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+            cwd=self.paths.root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if upstream.returncode == 0 and upstream.stdout.strip():
+            remote = subprocess.run(
+                ["git", "config", "--get", f"branch.{branch}.remote"],
+                cwd=self.paths.root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            push_args = ["git", "push"]
+        else:
+            remotes = subprocess.run(
+                ["git", "remote"],
+                cwd=self.paths.root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.split()
+            if not remotes:
+                raise RuntimeError("cannot publish diary changes because no Git remote is configured")
+            if "origin" in remotes:
+                remote = "origin"
+            elif len(remotes) == 1:
+                remote = remotes[0]
+            else:
+                raise RuntimeError("cannot choose a Git remote; configure an upstream for the current branch")
+            push_args = ["git", "push", "--set-upstream", remote, branch]
+
+        pushed = subprocess.run(
+            push_args,
+            cwd=self.paths.root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if pushed.returncode != 0:
+            detail = (pushed.stderr or pushed.stdout).strip()
+            raise RuntimeError(f"git push failed: {detail or 'unknown error'}")
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.paths.root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        return {"commit": head, "remote": remote, "branch": branch}
+
+    def git_publish(self, message: str) -> dict[str, Any]:
+        """Commit the complete repository state and push the current branch."""
+        commit = self.git_snapshot(message)
+        return {"commit": commit, "push": self.git_push_current_branch()}
 
     def log_agent_run(self, entry_id: str | None, routing: dict[str, Any], context_chars: int, output_chars: int) -> None:
         with self.connect() as db:

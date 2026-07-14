@@ -83,7 +83,8 @@ class DiaryStoreTests(unittest.TestCase):
         legacy = self.store.create_draft("旧格式仍然有效。", entry_date="2026-05-01")
         preview = self.store.save_preview(legacy["entry_id"], "旧格式仍然有效。", [{"text": "旧格式仍然有效。", "theme": "系统"}])
         self.assertEqual(preview["preview"]["segments"][0]["tags"], [])
-        self.store.confirm(legacy["entry_id"])
+        legacy_result = self.store.confirm(legacy["entry_id"])
+        self.assertNotIn("AI goal interpretation", Path(legacy_result["clean_path"]).read_text(encoding="utf-8"))
 
         draft = self.store.create_draft("今天慢跑三公里。", entry_date="2026-05-02")
         preview = self.store.save_preview(
@@ -388,6 +389,15 @@ class DiaryStoreTests(unittest.TestCase):
         for payload in invalid_payloads:
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 self.store.save_preview(draft["entry_id"], text, segments, goal_interpretations=[payload])
+        with self.assertRaises(ValueError):
+            self.store.save_preview(draft["entry_id"], text, segments, goal_interpretations={"bad": "shape"})
+        with self.assertRaises(ValueError):
+            self.store.save_preview(
+                draft["entry_id"],
+                text,
+                segments,
+                goal_interpretations=[{"goal_id": active_goal_id}],
+            )
 
         first = self.store.save_preview(
             draft["entry_id"], text, segments, goal_interpretations=[interpretation]
@@ -486,14 +496,29 @@ class DiaryStoreTests(unittest.TestCase):
         self.assertNotIn("OPENAI_API_KEY", text)
         self.assertNotIn("import openai", text)
 
-    def test_skill_proposal_commits_database_and_journals(self):
+    def test_weekly_review_publish_and_skill_revision_reach_remote(self):
+        remote_temp = tempfile.TemporaryDirectory()
+        self.addCleanup(remote_temp.cleanup)
+        remote = Path(remote_temp.name) / "diary.git"
+        subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
         subprocess.run(["git", "init"], cwd=self.root, check=True, capture_output=True)
-        self.confirm_entry("需要保存到 Git", "2026-07-12", "系统")
+        subprocess.run(["git", "remote", "add", "origin", str(remote)], cwd=self.root, check=True, capture_output=True)
+
+        weekly = self.store.create_draft("本周完成了日记发布流程。", "weekly", entry_date="2026-07-12")
+        self.store.save_preview(
+            weekly["entry_id"],
+            "本周完成了日记发布流程。",
+            [{"text": "本周完成了日记发布流程。", "theme": "系统"}],
+        )
+        published = self.store.git_publish("chore(diary): publish weekly review 2026-07-12")
+        self.assertEqual(published["commit"], published["push"]["commit"])
+
         feedback = self.store.add_feedback("希望自动提交")
         result = self.store.propose_skill_revision(
             {"feedback_ids": [feedback["feedback_id"]], "summary": "自动提交"}
         )
         self.assertTrue(result["snapshot_commit"])
+        self.assertEqual(result["metadata_commit"], result["push"]["commit"])
         tracked = subprocess.run(
             ["git", "ls-tree", "-r", "--name-only", "HEAD"],
             cwd=self.root,
@@ -503,12 +528,22 @@ class DiaryStoreTests(unittest.TestCase):
         ).stdout
         self.assertIn("data/diary.sqlite3", tracked)
         self.assertIn("journals/originals/2026/07/", tracked)
-        self.assertIn("journals/cleaned/2026/07/", tracked)
         applied = self.store.mark_skill_revision(result["revision_id"], "applied", "tests passed")
         self.assertTrue(applied["commit"])
+        self.assertEqual(applied["metadata_commit"], applied["push"]["commit"])
         with self.store.connect() as db:
             audit = db.execute("SELECT status,git_after_commit FROM skill_revisions WHERE id=?", (result["revision_id"],)).fetchone()
         self.assertEqual(tuple(audit), ("applied", applied["commit"]))
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"], cwd=self.root, check=True, capture_output=True, text=True
+        ).stdout.strip()
+        remote_head = subprocess.run(
+            ["git", "--git-dir", str(remote), "rev-parse", f"refs/heads/{branch}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.assertEqual(remote_head, applied["metadata_commit"])
         status = subprocess.run(
             ["git", "status", "--short"],
             cwd=self.root,
@@ -517,6 +552,12 @@ class DiaryStoreTests(unittest.TestCase):
             text=True,
         ).stdout
         self.assertEqual(status, "")
+
+    def test_git_publish_requires_remote(self):
+        subprocess.run(["git", "init"], cwd=self.root, check=True, capture_output=True)
+        self.store.initialize()
+        with self.assertRaisesRegex(RuntimeError, "no Git remote"):
+            self.store.git_publish("chore(diary): publish without remote")
 
 
 if __name__ == "__main__":

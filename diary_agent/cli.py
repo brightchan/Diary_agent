@@ -108,6 +108,9 @@ def parser() -> argparse.ArgumentParser:
     snapshot = commands.add_parser("git-snapshot")
     snapshot.add_argument("--message", required=True)
 
+    publish = commands.add_parser("git-publish")
+    publish.add_argument("--message", required=True)
+
     commands.add_parser("backup")
     return root
 
@@ -169,6 +172,8 @@ def main(argv: list[str] | None = None) -> int:
             result = store.mark_skill_revision(args.revision_id, args.status, args.test_summary)
         elif args.command == "git-snapshot":
             result = {"commit": store.git_snapshot(args.message)}
+        elif args.command == "git-publish":
+            result = store.git_publish(args.message)
         elif args.command == "backup":
             result = store.backup()
         else:

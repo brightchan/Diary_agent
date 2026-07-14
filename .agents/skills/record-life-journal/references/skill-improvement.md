@@ -16,6 +16,6 @@ The proposal JSON must contain:
 }
 ```
 
-Run `propose-skill-revision --proposal '<json-or-file>'`. It stores the proposal, marks feedback planned, runs `git add -A`, and commits the complete repository including SQLite and all journals. It records the snapshot commit in the revision audit.
+Run `propose-skill-revision --proposal '<json-or-file>'`. It stores the proposal, marks feedback planned, runs `git add -A`, commits the complete repository including SQLite and all journals, records the snapshot commit in the revision audit, and pushes the current branch. Do not claim the weekly review is complete unless the push succeeds.
 
-After explicit approval, apply the diff, validate the Skill, run tests, then mark the revision `applied`. Mark it `failed` with a test summary when validation fails. Both outcomes create another Git snapshot.
+After explicit approval, apply the diff, validate the Skill, run tests, then mark the revision `applied`. Mark it `failed` with a test summary when validation fails. Terminal outcomes create and push another Git snapshot plus the audit metadata commit. If the push fails after a commit succeeds, preserve the commits and retry with `git-publish` instead of creating a duplicate proposal or result.

@@ -49,9 +49,10 @@ The capture flow is:
 1. Your exact text is saved immediately as a draft and preserved as the verbatim original.
 2. Codex cleans only speech artifacts, repetition, punctuation, and obvious sentence boundaries.
 3. Codex splits multiple ideas into ordered segments, gives each a primary theme, and may add cross-cutting tags.
-4. Codex may show uncertain terms, related older entries, and at most one optional reflection question.
-5. You correct, confirm, skip the question, defer it, or decline the entry.
-6. Only explicit confirmation creates the finalized cleaned journal and structured records.
+4. When the entry is locally relevant to an Active goal, Codex may add a clearly labeled AI goal interpretation with evidence and concise feedback.
+5. Codex may show uncertain terms, related older entries, and at most one optional reflection question.
+6. You correct or remove any interpretation, confirm, skip the question, defer it, or decline the entry.
+7. Only explicit confirmation creates the finalized cleaned journal and structured records.
 
 Useful replies include:
 
@@ -86,7 +87,7 @@ The weekly workflow summarizes the previous Monday through Sunday when confirmed
 - unfinished threads and practical next-week actions;
 - two to five optional reflection questions.
 
-The weekly journal is also preview-first and requires confirmation. Goal changes and theme changes suggested by a weekly review are separate proposals; confirming the weekly journal does not apply them.
+The weekly journal is also preview-first and requires confirmation. Goal changes and theme changes suggested by a weekly review are separate proposals; confirming the weekly journal does not apply them. After the review preview is generated, and again after confirmation or later corrections, the agent commits the complete repository state and pushes the current branch.
 
 The intended schedule is Monday at 01:00 in `Asia/Singapore`. This repository does not run a background scheduler by itself. A Codex automation must be configured to invoke the weekly workflow.
 
@@ -160,7 +161,9 @@ You can also ask to update, complete, pause, abandon, or reactivate a goal. Thos
 
 ### Record goal progress and blockers
 
-After a related diary entry is confirmed, ask Codex to link it as evidence:
+During ordinary diary capture, Codex automatically checks only locally relevant Active goals. When the current entry contains evidence, the normal diary preview may include an AI interpretation labeled `progress`, `blocker`, `reflection`, or `related`, plus concise feedback. You can correct or remove it before confirming the entry. Confirmed interpretations remain analytical annotations: they do not change goal status, create goal events, or become authoritative goal evidence.
+
+To promote a confirmed diary entry into authoritative goal evidence, explicitly ask Codex to link it:
 
 > Link today's confirmed running entry to “Run three times this week” as progress. Evidence: completed the second run.
 
@@ -209,7 +212,7 @@ python3 .agents/skills/record-life-journal/scripts/journal.py --root . \
   create-draft --text '<verbatim user input>'
 ```
 
-Use the returned `entry_id` throughout the turn. Use its routing decision and retrieved context instead of scanning the entire journal tree.
+Use the returned `entry_id` throughout the turn. Use its routing decision, journal context, and bounded `goal_context` instead of scanning the entire journal tree or all goals. When `goal_context.has_context` is false, skip goal interpretation.
 
 Cleaning, classification, and continuity checks are always required. The deterministic cleaner is only a starting candidate:
 
@@ -220,6 +223,8 @@ python3 .agents/skills/record-life-journal/scripts/journal.py --root . \
 
 Preserve facts, negation, intensity, uncertainty, voice, and chronology. Put any potentially meaning-changing correction in `uncertainties` instead of silently applying it.
 
+After cleaning and classification, compare the entry only with goals in `goal_context`. Any match is AI-generated analysis based on current-entry evidence. It must not create or mutate a goal, goal event, or explicit goal-entry link.
+
 Save the merged preview after presenting or correcting it:
 
 ```bash
@@ -227,10 +232,11 @@ python3 .agents/skills/record-life-journal/scripts/journal.py --root . save-prev
   --entry-id '<uuid>' \
   --clean-text '<cleaned text>' \
   --segments '[{"text":"...","theme":"primary","tags":["cross-cutting"]}]' \
-  --uncertainties '[]' --links '[]' --followups '[]'
+  --uncertainties '[]' --links '[]' --followups '[]' \
+  --goal-interpretations '[{"goal_id":"...","relation":"progress","evidence":"...","interpretation":"...","feedback":"...","confidence":0.9}]'
 ```
 
-Segments stay in narrative order. Each requires a primary `theme`; `tags` are optional, deduplicated, and must not repeat the primary theme. Ordinary entries may have at most one optional follow-up question.
+Segments stay in narrative order. Each requires a primary `theme`; `tags` are optional, deduplicated, and must not repeat the primary theme. Goal interpretations are optional, use only Active goals, require evidence from this entry, and can be corrected or removed by saving the preview again. Ordinary entries may have at most one optional follow-up question.
 
 Confirm only after the user explicitly approves the displayed version:
 
@@ -317,7 +323,7 @@ For the Monday 01:00 weekly journal:
 python3 -m diary_agent.cli --root . weekly-context
 ```
 
-Exit without semantic work when `has_content` is false. Otherwise use only the returned current entries, goals, historical connections, reflection candidate, and theme evidence. Create a weekly draft, show the review plus two to five optional questions, and require confirmation. Keep goal and theme mutations as separately confirmed proposals.
+Exit without semantic work when `has_content` is false. Otherwise use only the returned current entries, goals, historical connections, reflection candidate, and theme evidence. Each Active goal keeps explicit `weekly_evidence` separate from non-authoritative `weekly_interpretations`; summaries must preserve that distinction and must not silently promote interpretations. Create a weekly draft, show the review plus two to five optional questions, and require confirmation. Keep goal and theme mutations as separately confirmed proposals.
 
 For the Monday 02:00 feedback review:
 
@@ -325,17 +331,17 @@ For the Monday 02:00 feedback review:
 python3 -m diary_agent.cli --root . feedback-review-context
 ```
 
-Exit when `has_feedback` is false. Otherwise follow `skill-improvement.md`; do not edit the active Skill merely because a proposal was created.
+Exit when `has_feedback` is false. Otherwise follow `skill-improvement.md`; do not edit the active Skill merely because a proposal was created. Proposal generation commits and pushes the complete repository state.
 
 ### CLI command reference
 
 | Command | Purpose |
 | --- | --- |
 | `init` | Create directories, schema, migrations, and missing memory files |
-| `create-draft` | Store verbatim text and return routing plus relevant context |
+| `create-draft` | Store verbatim text and return routing, journal context, and locally relevant Active goals |
 | `route` | Inspect deterministic delegation signals without creating an entry |
 | `local-clean` | Produce a conservative cleaning candidate |
-| `save-preview` | Store cleaned text, segments, uncertainties, links, and follow-ups |
+| `save-preview` | Store cleaned text, segments, uncertainties, links, follow-ups, and optional AI goal interpretations |
 | `confirm` | Finalize a preview and export Markdown |
 | `search` | Retrieve relevant confirmed journal records |
 | `add-feedback` | Store workflow friction or a new requirement |
@@ -352,6 +358,7 @@ Exit when `has_feedback` is false. Otherwise follow `skill-improvement.md`; do n
 | `propose-skill-revision` | Store a revision and take automatic pre-change Git snapshots |
 | `mark-skill-revision` | Audit approval, application, rejection, or failure |
 | `git-snapshot` | Checkpoint SQLite WAL and commit the complete local state |
+| `git-publish` | Checkpoint SQLite WAL, commit the complete state, and push the current branch |
 | `backup` | Create a consistent database backup and checksum |
 
 Run `python3 -m diary_agent.cli --help` or append `--help` after a command for current arguments.
@@ -396,19 +403,20 @@ A change to the active diary Skill is more strictly governed than an ordinary co
 
 1. Capture the user's workflow feedback immediately with `add-feedback`.
 2. Review unprocessed feedback and prepare the schema required by `skill-improvement.md`.
-3. Run `propose-skill-revision`. This stores the proposal and automatically creates full-repository Git snapshots, including SQLite and journal Markdown.
+3. Run `propose-skill-revision`. This stores the proposal and automatically creates and pushes full-repository Git snapshots, including SQLite and journal Markdown.
 4. Stop and obtain explicit user approval. A proposal alone is not authorization to edit the active Skill.
 5. Implement only the approved scope.
 6. Run pytest and `quick_validate.py`.
-7. Mark the revision `applied` only after successful validation, or `failed` with the test summary. The result creates another audited Git snapshot.
+7. Mark the revision `applied` only after successful validation, or `failed` with the test summary. The result creates and pushes another audited Git snapshot plus its audit metadata.
+8. If a push fails after the commits succeed, keep the commits and retry with `git-publish`. Do not create a duplicate proposal/result or report completion before the remote contains the final commit.
 
-Do not use `git-snapshot` casually: it stages and commits the complete repository state.
+Do not use `git-snapshot` or `git-publish` casually: both stage the complete repository state, and `git-publish` also updates the remote branch.
 
 ## Storage and repository map
 
 | Path | Role |
 | --- | --- |
-| `data/diary.sqlite3` | Authoritative structured diary, theme, goal, feedback, and revision data |
+| `data/diary.sqlite3` | Authoritative structured diary, theme, goal, goal-interpretation, feedback, and revision data |
 | `data/drafts/` | Temporary draft/preview state; removed after confirmation |
 | `data/backups/` | SQLite backups and SHA-256 manifests |
 | `journals/originals/YYYY/MM/` | Verbatim input, including draft/confirmed status |
@@ -431,6 +439,7 @@ The database uses SQLite WAL mode during normal work. WAL and SHM sidecars are d
 - Verbatim originals are never replaced by cleaned text.
 - Confirmed journals are not silently rewritten by theme or goal governance.
 - Goals are explicit user commitments, never inferred from older diary text.
+- AI goal interpretations are current-entry annotations, not user-authored facts or authoritative goal evidence.
 - Theme, tag, and goal mutations require per-item decisions.
 - Follow-up questions are optional and never block confirmation.
 - Weekly journal confirmation does not automatically apply goal, theme, or Skill changes.

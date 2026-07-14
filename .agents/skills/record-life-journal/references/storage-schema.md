@@ -13,6 +13,7 @@ SQLite at `data/diary.sqlite3` is the structured source of truth.
 - `goals`: confirmed life, short-term, and weekly goal hierarchy.
 - `goal_events`: immutable goal creation, update, status, and evidence-link history.
 - `goal_entry_links`: confirmed progress, blocker, reflection, or related evidence.
+- `entry_goal_interpretations`: AI-generated, current-entry evidence annotations persisted only with diary confirmation; separate from authoritative goal links and events.
 - `goal_change_proposals`: preview and per-item confirmation audit for goal changes.
 - `feedback_events`: workflow friction and new requirements.
 - `skill_revisions`: Skill changes with Git snapshots.
@@ -29,7 +30,7 @@ The main SQLite database and all journal Markdown files are intentionally Git-tr
 
 Theme changes never rewrite verbatim originals or confirmed cleaned Markdown. `reassign_segment` changes only the explicitly approved structured primary theme; `add_segment_tag` and `remove_segment_tag` change only explicit structured tag membership. SQLite remains authoritative when a historical Markdown theme snapshot differs after governance.
 
-`weekly-context` returns current-period entries, goal evidence, and a bounded `historical_connections` set of older segments with dates, IDs, scores, and evidence reasons. It excludes the current weekly period and returns `reflection_prompt_candidate: null` when evidence is insufficient.
+`weekly-context` returns current-period entries, Active goals with separate `weekly_evidence` and non-authoritative `weekly_interpretations`, and a bounded `historical_connections` set of older segments with dates, IDs, scores, and evidence reasons. It excludes the current weekly period and returns `reflection_prompt_candidate: null` when evidence is insufficient. Weekly interpretation records retain their source entry and never mutate goal state.
 
 Goal mirror:
 
