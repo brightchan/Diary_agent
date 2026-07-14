@@ -20,3 +20,8 @@
 - ID: `4e11eda9-68bc-447c-b984-75ede930ebb1`
 - Allow unqualified personal sentences to trigger the diary capture skill without requiring an explicit record command; allow one segment to carry multiple searchable tags; retrieve relevant older diary segments for weekly reviews and optional evidence-based prompts, while remaining local-first and avoiding external model/API dependencies.
 
+## 2026-07-14T12:47:25+08:00 [new_need]
+
+- ID: `dd9a1448-cb9c-4895-94c9-2cd26e9ea09f`
+- Automatically match every diary entry against relevant active goals during the normal capture flow and provide concise goal-related feedback without an extra interaction. Preserve the cleaned journal as the user's wording, append a clearly labeled AI goal interpretation section to the preview and confirmed cleaned Markdown, and make the structured interpretations available to weekly review. The user should be able to correct or remove the interpretation before confirming the entry.
+
