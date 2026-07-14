@@ -15,3 +15,8 @@
 - ID: `8e485105-2361-4c7e-b211-bc8e11ab3c94`
 - 用户确认现有一个 segment 对应一个主题 Tag 的模型可以接受，不需要另建文章级 Tag 体系。Active/Inactive 应继续作为 themes 的全局状态；如增加新表，应用于周度主题变更提案与审计历史，而不是建立重复的 entry_themes 分类层。
 
+## 2026-07-14T08:21:41+08:00 [feature-request]
+
+- ID: `4e11eda9-68bc-447c-b984-75ede930ebb1`
+- Allow unqualified personal sentences to trigger the diary capture skill without requiring an explicit record command; allow one segment to carry multiple searchable tags; retrieve relevant older diary segments for weekly reviews and optional evidence-based prompts, while remaining local-first and avoiding external model/API dependencies.
+

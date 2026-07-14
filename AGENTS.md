@@ -7,3 +7,4 @@
 - Track `data/diary.sqlite3` and every file under `journals/` in Git. Ignore only SQLite WAL/SHM sidecars and disposable caches.
 - Skill changes require a stored proposal, an automatic pre-change Git snapshot, explicit user approval, validation, tests, and a post-change Git snapshot.
 - Use `python -m pytest` and the skill-creator `quick_validate.py` before marking a Skill revision applied.
+- For repository tests, agents may use the existing conda environment at `/mnt/d/Project_PA/condaenv_host`; invoke pytest as `/mnt/d/Project_PA/condaenv_host/bin/python -m pytest` without modifying or recreating that environment.
