@@ -60,3 +60,8 @@
 - ID: `20aad33b-265e-43b0-b095-ee0bae6caafa`
 - 口语转写中，读音相似的中文或英文人名、公司名和物件名可能被错转写（例如 Karl/Kau 应为 Kyle）。清理阶段必须把这类可能改变实体身份的规范化列为待确认项，在预览中直接向用户澄清；不得因上下文或相似读音静默替换。
 
+## 2026-07-16T15:30:33+08:00 [feature-request]
+
+- ID: `bfd13a32-8e78-4d2c-8556-efdb7c60c142`
+- Add first-class decisions: pending or made/archived, reusable theme tags, structured decision analysis with facts/assumptions/judgement separation, timeline-aware weekly reminders, agent-filled previews requiring confirmation, and explicit pending-to-made changes.
+

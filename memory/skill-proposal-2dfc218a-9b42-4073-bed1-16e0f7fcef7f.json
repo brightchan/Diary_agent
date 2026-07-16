@@ -1,0 +1,17 @@
+{
+  "feedback_ids": [
+    "bfd13a32-8e78-4d2c-8556-efdb7c60c142"
+  ],
+  "problem_summary": "The diary workflow has no first-class way to store pending or made decisions, carry the same theme/tag classification, preserve a structured decision analysis, or remind the user during weekly review.",
+  "impact": "Decision reasoning would otherwise be mixed into ordinary diary text, making pending decisions hard to revisit, made decisions hard to archive and search, and timeline-based weekly follow-up inconsistent.",
+  "proposed_diff": "Add decision entries and a normalized decisions table with pending/made state, archive timestamps, review/due dates, options including a do-nothing option, reversible and irreversible consequences, opportunity cost, one/five-year regret, assumptions, smallest experiment, and a recommendation with facts/assumptions/judgement. Extend preview/confirm and Markdown export, expose decision review context in weekly-context, add explicit decision-change-preview/apply-decision-changes for make/reopen/update operations, update the Skill protocol and README/storage docs, and add migration/tests.",
+  "compatibility": "Existing diary, weekly, thought, theme, tag, goal, and journal records remain readable. The entry type migration is additive and preserves all existing rows; decision records use the existing preview/confirm boundary and segment tags.",
+  "tests": [
+    "Decision preview normalizes and validates the full structure and requires a doing-nothing option",
+    "Decision confirmation stores pending and made records, tags, archive metadata, and Markdown structure",
+    "Weekly context returns timeline-aware pending decision reminders even without diary entries",
+    "Decision change proposals require explicit approval and update Markdown without changing originals",
+    "Existing full repository test suite and Skill quick validation"
+  ],
+  "token_cost_change": "neutral with reason: decision validation and bounded weekly context are local deterministic work; the Skill adds one structured analysis stage only for decision entries and pending reviews."
+}
