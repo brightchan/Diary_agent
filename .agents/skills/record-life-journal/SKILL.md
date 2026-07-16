@@ -1,6 +1,6 @@
 ---
 name: record-life-journal
-description: Capture clear personal-life statements by default; clean, classify, tag, connect, review, confirm, search, and summarize diary entries; govern themes and confirmed life, multi-year long-term, within-one-year short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, standalone personal experiences or reflections, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences, workflow feedback, or diary skill improvements.
+description: Capture clear personal-life statements by default; clean, classify, tag, connect, review, confirm, search, and summarize diary entries and pending or made decisions; govern themes and confirmed life, multi-year long-term, within-one-year short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, decision capture and review, standalone personal experiences or reflections, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences, workflow feedback, or diary skill improvements.
 ---
 
 # Record Life Journal
@@ -13,6 +13,26 @@ Treat an unqualified declarative message about the user's own experience, feelin
 
 The broader trigger does not change the safety boundary: preserve the verbatim message in a draft first, show a preview, and require explicit confirmation before final storage.
 
+## Decision capture and review
+
+When the user's statement is about choosing between meaningful options, route it as a `decision` entry when the user asks to track it as a decision or when the intent is clearly to preserve a pending or made choice. Decisions use the same ordered segments, primary themes, and cross-cutting tags as diary entries.
+
+Every decision preview must contain:
+
+- `status`: `pending` or `made`;
+- the user's actual objective;
+- options, including doing nothing/no action;
+- facts, assumptions, reversible consequences, and irreversible consequences for each option;
+- opportunity cost;
+- likely regret in one and/or five years;
+- assumptions that could be wrong;
+- the smallest experiment that would reduce uncertainty; and
+- one recommended option.
+
+Keep facts, assumptions, and the agent's judgement visibly separate. If the user did not supply part of this analysis, the agent may draft it from the user's entry and retrieved local evidence, but must label it as agent analysis and ask the user to confirm the completed decision preview. Do not silently turn a recommendation into a made decision. A `made` decision is archived for future reference after confirmation; a `pending` decision remains open.
+
+Pending decisions may include a review date and/or due date. During weekly review, use `decision_review` from `weekly-context` to surface overdue and upcoming decisions, explain the reminder, propose a next action, and fill the same structure so the user can confirm, defer with a new timeline, run the smallest experiment, or leave it pending. Updating a pending decision or changing it to `made` requires `decision-change-preview` followed by explicit approval through `apply-decision-changes`.
+
 ## Start every capture safely
 
 1. Run `python .agents/skills/record-life-journal/scripts/journal.py --root . create-draft --text '<verbatim input>'` before interpreting the entry.
@@ -21,6 +41,8 @@ The broader trigger does not change the safety boundary: preserve the verbatim m
 4. Use the returned `cleaning_style` as a compact preservation guide. A style profile may prevent unnecessary edits; it never authorizes embellishment, normalization, or rewriting.
 5. Use the returned `goal_context` after cleaning and classification. When it contains relevant Active goals, prepare compact goal interpretations before merging the preview; when it is empty, skip that semantic stage.
 6. Read [agent-protocol.md](references/agent-protocol.md) before producing or merging an analysis payload.
+
+For a decision, use `create-draft --type decision`, and pass the structured decision analysis through `save-preview --decision`. The normal entry confirmation remains the only confirmation boundary for the initial decision record.
 
 ## Route semantic work
 
@@ -65,7 +87,7 @@ python .agents/skills/record-life-journal/scripts/journal.py --root . local-clea
 
 ## Preview before confirmation
 
-Show one concise preview containing cleaned full text, ordered theme segments, proposed new themes, uncertainties, relevant prior entries with reasons, AI goal interpretations when present, and at most one optional reflection question. Keep interpretations separate from the user's narrative and make clear that they are evidence-based AI analysis, not user-authored facts or authoritative goal records.
+Show one concise preview containing cleaned full text, ordered theme segments, proposed new themes, uncertainties, relevant prior entries with reasons, AI goal interpretations when present, the full decision analysis when this is a decision, and at most one optional reflection question. Keep interpretations and decision analysis separate from the user's narrative. Make clear which decision fields are user-supplied facts, agent-labelled assumptions, and agent judgement.
 
 After corrections or removal of any goal interpretation, call `save-preview` with schema-valid JSON. The normal entry preview is the only confirmation boundary; do not add a second per-goal confirmation step. Do not confirm in the same step unless the user explicitly confirms the displayed version.
 
@@ -86,14 +108,15 @@ Run `search --query '<question>'`. Retrieval has no fixed item-count limit; it s
 At Monday 01:00 Asia/Singapore:
 
 1. Run `weekly-context`.
-2. Exit without an agent call when `has_content` is false.
+2. Exit without an agent call when `has_content` is false. Pending decisions alone make `has_content` true so a scheduled decision reminder is not lost.
 3. When content exists, create a weekly draft covering the returned period.
 4. Use `historical_connections` when present to summarize evidence-backed patterns, changes, repeated blockers, and unfinished threads across weeks. Never imply a connection that the returned evidence does not support.
 5. Summarize facts, feelings/insights, theme and tag progress, goal progress and blockers, unfinished threads, and next-week actions. Treat `weekly_interpretations` as non-authoritative inferred evidence, keep it distinct from explicit `weekly_evidence`, and never promote it to a goal link or mutate a goal silently.
 6. Ask an optional historical reflection question only when `reflection_prompt_candidate` is present and its cited historical segment supports the question.
 7. Include goal-adjustment drafts and theme-governance suggestions as separate review items. Never apply them through weekly-journal confirmation.
-8. Add 2-5 optional questions and wait for confirmation before final storage.
-9. Immediately after generating and saving the weekly review preview, run `git-publish` with a period-specific message. Publish again after confirmation or any later correction changes repository state. Do not report the review generation or confirmation complete until the push succeeds.
+8. Include `decision_review` suggestions for pending decisions. For overdue or upcoming items, fill missing analysis fields, recommend one option, and distinguish facts, assumptions, and judgement. Never mark a decision made through weekly-journal confirmation; use an explicit decision change proposal.
+9. Add 2-5 optional questions and wait for confirmation before final storage.
+10. Immediately after generating and saving the weekly review preview, run `git-publish` with a period-specific message. Publish again after confirmation or any later correction changes repository state. Do not report the review generation or confirmation complete until the push succeeds.
 
 ## Govern themes and goals
 
@@ -106,6 +129,7 @@ Read [agent-protocol.md](references/agent-protocol.md) before preparing change p
 - Classify `life` as an open-ended life direction, `long_term` as a goal spanning multiple years, `short_term` as a goal intended to finish within one year, and `weekly` as a one-week focus. Use `life -> long_term -> short_term -> weekly` as the breadth order while allowing a child to omit intermediate parents.
 - Use `goal-context` for goal review. Use `conversation-context` to retrieve only relevant Active goals, recent events, and a small evidence set for a current question.
 - Automatic entry goal interpretations are confirmed analytical annotations only. Explicit `link_entry` proposals remain the path for promoting diary evidence into authoritative goal evidence.
+- Decision status and analysis are authoritative only after decision preview confirmation. Use `decision-change-preview` and `apply-decision-changes` for later updates, including `make` and `reopen`; these updates may refresh the decision section of confirmed Markdown but never alter the original.
 - Treat SQLite as truth. Regenerate `memory/goals.md` only after confirmed goal changes. Never modify originals or silently rewrite confirmed cleaned Markdown when theme or goal state changes.
 
 ## Feedback and weekly skill improvement

@@ -40,6 +40,68 @@ class DiaryStoreTests(unittest.TestCase):
         )
         return result["results"][0]["goal_id"]
 
+    def decision_payload(self, status: str = "pending", review_date: str | None = "2026-07-12") -> dict:
+        return {
+            "status": status,
+            "objective": "Choose whether to accept the new role without losing optionality.",
+            "options": [
+                {
+                    "name": "Do nothing",
+                    "is_do_nothing": True,
+                    "facts": ["The current role remains available today."],
+                    "assumptions": ["The current role will remain tolerable for another quarter."],
+                    "reversible_consequences": ["I can revisit the choice next month."],
+                    "irreversible_consequences": [],
+                },
+                {
+                    "name": "Accept the new role",
+                    "facts": ["The offer includes broader responsibility."],
+                    "assumptions": ["The manager will support the transition."],
+                    "reversible_consequences": ["The first-month onboarding plan can be tested."],
+                    "irreversible_consequences": ["The current role may no longer be available."],
+                },
+            ],
+            "opportunity_cost": {
+                "facts": ["Time spent evaluating the offer delays other work."],
+                "assumptions": ["The evaluation can be completed within a week."],
+                "judgement": "The opportunity cost of waiting is meaningful but manageable.",
+            },
+            "likely_regret": {
+                "one_year": "I may regret not testing the broader role.",
+                "five_years": "I may regret optimizing only for short-term comfort.",
+            },
+            "assumptions": ["The role will create useful learning rather than only more workload."],
+            "smallest_experiment": {
+                "action": "Ask for a one-week shadowing conversation with the new team.",
+                "uncertainty_reduced": "Whether the work and manager fit the actual objective.",
+                "timebox": "One week",
+                "success_signal": "Clear answers about scope, support, and first-quarter expectations.",
+            },
+            "recommendation": {
+                "option": "Accept the new role",
+                "facts": ["The role offers broader responsibility."],
+                "assumptions": ["The support assumptions can be tested before committing fully."],
+                "judgement": "Recommend accepting if the shadowing conversation confirms the support plan.",
+            },
+            "timeline": {
+                "review_date": review_date,
+                "due_date": "2026-07-15",
+                "notes": "Revisit after the shadowing conversation.",
+            },
+        }
+
+    def confirm_decision(self, text: str, date: str, status: str = "pending") -> tuple[str, dict]:
+        draft = self.store.create_draft(text, entry_type="decision", entry_date=date)
+        payload = self.decision_payload(status=status)
+        preview = self.store.save_preview(
+            draft["entry_id"],
+            text,
+            [{"text": text, "theme": "职业", "tags": ["艾名"]}],
+            decision=payload,
+        )
+        result = self.store.confirm(draft["entry_id"])
+        return draft["entry_id"], {"preview": preview, "result": result}
+
     def test_draft_preview_confirm_and_idempotency(self):
         draft = self.store.create_draft("嗯，今天我继续整理日记系统。另外也去跑步了。")
         self.assertEqual(
@@ -116,6 +178,47 @@ class DiaryStoreTests(unittest.TestCase):
         self.assertEqual(context["period_start"], "2026-07-06")
         self.assertEqual(context["period_end"], "2026-07-12")
         self.assertEqual(len(context["entries"]), 1)
+
+    def test_decision_preview_confirm_archive_search_and_weekly_reminder(self):
+        entry_id, result = self.confirm_decision("我正在考虑是否接受新的工作机会。", "2026-07-01")
+        self.assertEqual(result["preview"]["preview"]["decision"]["status"], "pending")
+        with self.store.connect() as db:
+            decision = db.execute("SELECT * FROM decisions WHERE entry_id=?", (entry_id,)).fetchone()
+            self.assertEqual(decision["status"], "pending")
+            self.assertEqual(decision["review_date"], "2026-07-12")
+            self.assertEqual(db.execute("SELECT count(*) FROM segment_tags").fetchone()[0], 2)
+        markdown = Path(result["result"]["clean_path"]).read_text(encoding="utf-8")
+        self.assertIn("decision_status: pending", markdown)
+        self.assertIn("### Recommendation", markdown)
+        self.assertIn("Recommended option: Accept the new role", markdown)
+
+        weekly = self.store.weekly_context(datetime(2026, 7, 13, 1, 0, tzinfo=TZ))
+        self.assertTrue(weekly["has_content"])
+        self.assertFalse(weekly["has_journal_content"])
+        self.assertEqual(weekly["pending_decisions"][0]["reminder"], "overdue")
+        self.assertEqual(weekly["decision_review"]["suggestions"][0]["decision_id"], decision["id"])
+        self.assertTrue(any(item["entry_id"] == entry_id for item in self.store.search("new role")))
+
+        proposed = self.store.decision_change_preview([{"action": "make", "decision_id": decision["id"]}])
+        self.assertTrue(proposed["requires_confirmation"])
+        applied = self.store.apply_decision_changes([{"proposal_id": proposed["proposals"][0]["proposal_id"], "decision": "approved"}])
+        self.assertEqual(applied["results"][0]["status"], "applied")
+        with self.store.connect() as db:
+            made = db.execute("SELECT status,made_at,archived_at FROM decisions WHERE id=?", (decision["id"],)).fetchone()
+            original = db.execute("SELECT raw_text FROM entries WHERE id=?", (entry_id,)).fetchone()[0]
+        self.assertEqual(made["status"], "made")
+        self.assertIsNotNone(made["archived_at"])
+        self.assertEqual(original, "我正在考虑是否接受新的工作机会。")
+        updated_markdown = Path(result["result"]["clean_path"]).read_text(encoding="utf-8")
+        self.assertIn("decision_status: made", updated_markdown)
+        self.assertIn("archived_at:", updated_markdown)
+
+    def test_decision_requires_do_nothing_option_and_separates_judgement(self):
+        draft = self.store.create_draft("是否换工作。", entry_type="decision")
+        payload = self.decision_payload()
+        payload["options"] = [{"name": "接受", "facts": [], "assumptions": []}, {"name": "拒绝"}]
+        with self.assertRaisesRegex(ValueError, "do-nothing"):
+            self.store.save_preview(draft["entry_id"], "是否换工作。", [{"text": "是否换工作。", "theme": "职业"}], decision=payload)
 
     def test_weekly_context_retrieves_bounded_older_segments_and_avoids_false_prompt(self):
         older = self.confirm_entry("跑步时总是呼吸急促，还没解决。", "2026-06-20", "运动", ["健康"])
@@ -605,7 +708,7 @@ class DiaryStoreTests(unittest.TestCase):
                    WHERE s.entry_id=? AND st.theme_id=s.theme_id""",
                 (entry_id,),
             ).fetchone()[0]
-        self.assertTrue({"theme_change_proposals", "segment_tags", "goals", "goal_events", "goal_entry_links", "entry_goal_interpretations", "goal_change_proposals", "cleaning_style_profiles"}.issubset(tables))
+        self.assertTrue({"theme_change_proposals", "segment_tags", "goals", "goal_events", "goal_entry_links", "entry_goal_interpretations", "goal_change_proposals", "cleaning_style_profiles", "decisions", "decision_change_proposals"}.issubset(tables))
         self.assertEqual(backfilled, 1)
 
     def test_default_personal_capture_guidance_and_no_external_semantic_dependency(self):

@@ -78,6 +78,35 @@ Use only the locally filtered Active goals returned in `goal_context`. If it is 
 
 These are AI-generated analytical annotations, not user-authored facts, `goal_events`, or authoritative `goal_entry_links`. They must not create or mutate goals. The user may correct or remove them in the normal diary preview.
 
+## Decision output
+
+For a decision entry or pending-decision weekly review, use this payload shape:
+
+```json
+{
+  "status": "pending|made",
+  "objective": "the user's actual objective",
+  "options": [
+    {
+      "name": "option name",
+      "is_do_nothing": false,
+      "facts": ["..."],
+      "assumptions": ["..."],
+      "reversible_consequences": ["..."],
+      "irreversible_consequences": ["..."]
+    }
+  ],
+  "opportunity_cost": {"facts": ["..."], "assumptions": ["..."], "judgement": "..."},
+  "likely_regret": {"one_year": "...", "five_years": "..."},
+  "assumptions": ["assumptions that could be wrong"],
+  "smallest_experiment": {"action": "...", "uncertainty_reduced": "...", "timebox": "...", "success_signal": "..."},
+  "recommendation": {"option": "...", "facts": ["..."], "assumptions": ["..."], "judgement": "..."},
+  "timeline": {"review_date": "YYYY-MM-DD", "due_date": "YYYY-MM-DD", "notes": "..."}
+}
+```
+
+The options array must include a clearly labelled do-nothing/no-action option. Fill omitted analysis from the current entry and bounded retrieved evidence, but label it as agent analysis and show it for confirmation. Keep facts, assumptions, and judgement distinct; recommendation is judgement, not fact. A pending-to-made transition is a separate explicit decision-change proposal, not an implicit consequence of weekly-journal confirmation.
+
 ## Merged preview
 
 Pass arrays to `save-preview` as JSON strings or files:

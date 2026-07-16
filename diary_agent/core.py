@@ -31,6 +31,17 @@ GOAL_SCOPE_LABELS = {
     "weekly": "Weekly",
 }
 
+DECISION_STATUSES = ("pending", "made")
+DECISION_STRUCTURE = (
+    "objective",
+    "options",
+    "opportunity_cost",
+    "likely_regret",
+    "assumptions",
+    "smallest_experiment",
+    "recommendation",
+)
+
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -38,7 +49,7 @@ PRAGMA journal_mode = WAL;
 
 CREATE TABLE IF NOT EXISTS entries (
     id TEXT PRIMARY KEY,
-    entry_type TEXT NOT NULL CHECK(entry_type IN ('diary','weekly','thought')),
+    entry_type TEXT NOT NULL CHECK(entry_type IN ('diary','weekly','thought','decision')),
     status TEXT NOT NULL CHECK(status IN ('draft','preview','confirmed','cancelled')),
     raw_text TEXT NOT NULL,
     clean_text TEXT,
@@ -185,6 +196,38 @@ CREATE TABLE IF NOT EXISTS goal_change_proposals (
     applied_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS decisions (
+    id TEXT PRIMARY KEY,
+    entry_id TEXT NOT NULL UNIQUE REFERENCES entries(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK(status IN ('pending','made')),
+    objective TEXT NOT NULL,
+    options_json TEXT NOT NULL,
+    opportunity_cost_json TEXT NOT NULL,
+    likely_regret_json TEXT NOT NULL,
+    assumptions_json TEXT NOT NULL,
+    smallest_experiment_json TEXT NOT NULL,
+    recommendation_json TEXT NOT NULL,
+    review_date TEXT,
+    due_date TEXT,
+    timeline_notes TEXT NOT NULL DEFAULT '',
+    made_at TEXT,
+    archived_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS decision_change_proposals (
+    id TEXT PRIMARY KEY,
+    decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+    action TEXT NOT NULL CHECK(action IN ('update','make','reopen')),
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed','approved','rejected','applied')),
+    created_at TEXT NOT NULL,
+    decided_at TEXT,
+    applied_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS feedback_events (
     id TEXT PRIMARY KEY,
     content TEXT NOT NULL,
@@ -240,6 +283,8 @@ CREATE INDEX IF NOT EXISTS idx_goal_interpretations_goal_entry
     ON entry_goal_interpretations(goal_id, entry_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_goal_changes_status ON goal_change_proposals(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_cleaning_style_created ON cleaning_style_profiles(created_at);
+CREATE INDEX IF NOT EXISTS idx_decisions_status_review ON decisions(status, review_date, due_date);
+CREATE INDEX IF NOT EXISTS idx_decision_changes_status ON decision_change_proposals(status, created_at);
 """
 
 
@@ -286,6 +331,31 @@ def _cosine(left: Counter[str], right: Counter[str]) -> float:
     if not dot:
         return 0.0
     return dot / math.sqrt(sum(v * v for v in left.values()) * sum(v * v for v in right.values()))
+
+
+def _text_list(value: Any, field: str) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, (list, tuple)):
+        raise ValueError(f"{field} must be a string or list of strings")
+    result = []
+    for item in value:
+        text = str(item).strip()
+        if text:
+            result.append(text)
+    return result
+
+
+def _iso_date(value: Any, field: str) -> str | None:
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text).date().isoformat()
+    except ValueError as exc:
+        raise ValueError(f"{field} must be an ISO date") from exc
 
 
 class DiaryStore:
@@ -336,6 +406,46 @@ class DiaryStore:
 
     def _migrate_schema(self, db: sqlite3.Connection) -> None:
         """Apply additive, idempotent migrations without rewriting journal files."""
+        entries_sql = db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='entries'"
+        ).fetchone()
+        if entries_sql and "'decision'" not in str(entries_sql["sql"]):
+            db.commit()
+            db.execute("PRAGMA foreign_keys=OFF")
+            try:
+                db.executescript(
+                    """
+                    BEGIN;
+                    CREATE TABLE entries_new (
+                        id TEXT PRIMARY KEY,
+                        entry_type TEXT NOT NULL CHECK(entry_type IN ('diary','weekly','thought','decision')),
+                        status TEXT NOT NULL CHECK(status IN ('draft','preview','confirmed','cancelled')),
+                        raw_text TEXT NOT NULL,
+                        clean_text TEXT,
+                        entry_date TEXT NOT NULL,
+                        source TEXT NOT NULL DEFAULT 'codex',
+                        preview_json TEXT NOT NULL DEFAULT '{}',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        confirmed_at TEXT
+                    );
+                    INSERT INTO entries_new
+                        SELECT id,entry_type,status,raw_text,clean_text,entry_date,source,preview_json,created_at,updated_at,confirmed_at
+                        FROM entries;
+                    DROP TABLE entries;
+                    ALTER TABLE entries_new RENAME TO entries;
+                    COMMIT;
+                    """
+                )
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
+            finally:
+                db.execute("PRAGMA foreign_keys=ON")
+            foreign_key_errors = db.execute("PRAGMA foreign_key_check").fetchall()
+            if foreign_key_errors:
+                raise RuntimeError("entry type migration failed foreign-key validation")
         proposal_sql = db.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='theme_change_proposals'"
         ).fetchone()
@@ -426,8 +536,8 @@ class DiaryStore:
 
     def create_draft(self, raw_text: str, entry_type: str = "diary", source: str = "codex", entry_date: str | None = None) -> dict[str, Any]:
         self.initialize()
-        if entry_type not in {"diary", "weekly", "thought"}:
-            raise ValueError("entry_type must be diary, weekly, or thought")
+        if entry_type not in {"diary", "weekly", "thought", "decision"}:
+            raise ValueError("entry_type must be diary, weekly, thought, or decision")
         text = raw_text.strip()
         if not text:
             raise ValueError("raw_text must not be empty")
@@ -500,6 +610,189 @@ class DiaryStore:
         cleaned = re.sub(r"[ \t]+", " ", cleaned)
         cleaned = re.sub(r" *\n *", "\n", cleaned)
         return cleaned.strip(" ，")
+
+    def _analysis_block(self, value: Any, field: str, require_judgement: bool = False) -> dict[str, Any]:
+        if isinstance(value, str):
+            value = {"judgement": value}
+        if not isinstance(value, dict):
+            raise ValueError(f"{field} must be an object or string")
+        facts = _text_list(value.get("facts"), f"{field}.facts")
+        assumptions = _text_list(value.get("assumptions"), f"{field}.assumptions")
+        judgement = str(value.get("judgement", value.get("judgment", ""))).strip()
+        if require_judgement and not judgement:
+            raise ValueError(f"{field}.judgement must not be empty")
+        return {"facts": facts, "assumptions": assumptions, "judgement": judgement}
+
+    def _normalize_decision_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise ValueError("decision must be an object")
+        status = str(payload.get("status", payload.get("decision_status", "pending"))).strip().lower()
+        if status not in DECISION_STATUSES:
+            raise ValueError("decision status must be pending or made")
+
+        objective = str(payload.get("objective", "")).strip()
+        if not objective:
+            raise ValueError("decision objective must not be empty")
+
+        raw_options = payload.get("options")
+        if not isinstance(raw_options, (list, tuple)) or len(raw_options) < 2:
+            raise ValueError("decision options must contain at least two options")
+        options = []
+        has_do_nothing = False
+        for raw_option in raw_options:
+            if isinstance(raw_option, str):
+                raw_option = {"name": raw_option}
+            if not isinstance(raw_option, dict):
+                raise ValueError("each decision option must be an object or string")
+            name = str(raw_option.get("name", raw_option.get("option", ""))).strip()
+            if not name:
+                raise ValueError("each decision option requires a name")
+            normalized_name = _normalize(name)
+            do_nothing = bool(raw_option.get("is_do_nothing")) or bool(
+                re.search(r"(?:donothing|nothing|noaction|不做|不变|维持现状|不采取行动)", normalized_name)
+            )
+            has_do_nothing = has_do_nothing or do_nothing
+            options.append(
+                {
+                    "name": name,
+                    "is_do_nothing": do_nothing,
+                    "facts": _text_list(raw_option.get("facts"), "option.facts"),
+                    "assumptions": _text_list(raw_option.get("assumptions"), "option.assumptions"),
+                    "reversible_consequences": _text_list(
+                        raw_option.get("reversible_consequences", raw_option.get("reversible")),
+                        "option.reversible_consequences",
+                    ),
+                    "irreversible_consequences": _text_list(
+                        raw_option.get("irreversible_consequences", raw_option.get("irreversible")),
+                        "option.irreversible_consequences",
+                    ),
+                }
+            )
+        if not has_do_nothing:
+            raise ValueError("decision options must include a do-nothing or no-action option")
+
+        regret = payload.get("likely_regret")
+        if isinstance(regret, str):
+            regret = {"one_year": regret}
+        if not isinstance(regret, dict):
+            raise ValueError("likely_regret must be an object or string")
+        likely_regret = {
+            "one_year": str(regret.get("one_year", "")).strip(),
+            "five_years": str(regret.get("five_years", regret.get("five_year", ""))).strip(),
+        }
+        if not any(likely_regret.values()):
+            raise ValueError("likely_regret must include one_year or five_years")
+
+        experiment = payload.get("smallest_experiment")
+        if isinstance(experiment, str):
+            experiment = {"action": experiment}
+        if not isinstance(experiment, dict):
+            raise ValueError("smallest_experiment must be an object or string")
+        smallest_experiment = {
+            "action": str(experiment.get("action", "")).strip(),
+            "uncertainty_reduced": str(experiment.get("uncertainty_reduced", "")).strip(),
+            "timebox": str(experiment.get("timebox", "")).strip(),
+            "success_signal": str(experiment.get("success_signal", "")).strip(),
+        }
+        if not smallest_experiment["action"]:
+            raise ValueError("smallest_experiment.action must not be empty")
+
+        recommendation = payload.get("recommendation")
+        if not isinstance(recommendation, dict):
+            if isinstance(recommendation, str):
+                recommendation = {"option": recommendation}
+            else:
+                raise ValueError("recommendation must be an object or string")
+        recommended_option = str(recommendation.get("option", recommendation.get("name", ""))).strip()
+        if not recommended_option:
+            raise ValueError("recommendation.option must not be empty")
+        if not any(_normalize(option["name"]) == _normalize(recommended_option) for option in options):
+            raise ValueError("recommendation.option must match one of the decision options")
+        normalized_recommendation = {
+            "option": recommended_option,
+            **self._analysis_block(recommendation, "recommendation", require_judgement=True),
+        }
+
+        timeline = payload.get("timeline")
+        if timeline is None:
+            timeline = {}
+        if not isinstance(timeline, dict):
+            raise ValueError("timeline must be an object")
+        review_date = _iso_date(payload.get("review_date", timeline.get("review_date")), "review_date")
+        due_date = _iso_date(payload.get("due_date", timeline.get("due_date")), "due_date")
+        timeline_notes = str(payload.get("timeline_notes", timeline.get("notes", ""))).strip()
+
+        return {
+            "status": status,
+            "objective": objective,
+            "options": options,
+            "opportunity_cost": self._analysis_block(payload.get("opportunity_cost"), "opportunity_cost", require_judgement=True),
+            "likely_regret": likely_regret,
+            "assumptions": _text_list(payload.get("assumptions"), "assumptions"),
+            "smallest_experiment": smallest_experiment,
+            "recommendation": normalized_recommendation,
+            "timeline": {
+                "review_date": review_date,
+                "due_date": due_date,
+                "notes": timeline_notes,
+            },
+        }
+
+    def _decision_payload_from_row(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "status": row["status"],
+            "objective": row["objective"],
+            "options": json.loads(row["options_json"] or "[]"),
+            "opportunity_cost": json.loads(row["opportunity_cost_json"] or "{}"),
+            "likely_regret": json.loads(row["likely_regret_json"] or "{}"),
+            "assumptions": json.loads(row["assumptions_json"] or "[]"),
+            "smallest_experiment": json.loads(row["smallest_experiment_json"] or "{}"),
+            "recommendation": json.loads(row["recommendation_json"] or "{}"),
+            "timeline": {
+                "review_date": row["review_date"],
+                "due_date": row["due_date"],
+                "notes": row["timeline_notes"] or "",
+            },
+        }
+
+    def _decision_search_text(self, decision: dict[str, Any]) -> str:
+        return " ".join(
+            str(decision.get(key) or "")
+            for key in ("objective", "options", "opportunity_cost", "likely_regret", "assumptions", "smallest_experiment", "recommendation")
+        )
+
+    def _decision_record(self, db: sqlite3.Connection, entry_id: str) -> dict[str, Any] | None:
+        row = db.execute(
+            """SELECT d.*,e.entry_date,e.clean_text,e.raw_text,e.source
+               FROM decisions d JOIN entries e ON e.id=d.entry_id
+               WHERE d.entry_id=?""",
+            (entry_id,),
+        ).fetchone()
+        if not row:
+            return None
+        payload = self._decision_payload_from_row(row)
+        record = {
+            "decision_id": row["id"],
+            "entry_id": row["entry_id"],
+            "entry_date": row["entry_date"],
+            "status": row["status"],
+            "objective": payload["objective"],
+            "options": payload["options"],
+            "opportunity_cost": payload["opportunity_cost"],
+            "likely_regret": payload["likely_regret"],
+            "assumptions": payload["assumptions"],
+            "smallest_experiment": payload["smallest_experiment"],
+            "recommendation": payload["recommendation"],
+            "timeline": payload["timeline"],
+            "review_date": row["review_date"],
+            "due_date": row["due_date"],
+            "made_at": row["made_at"],
+            "archived_at": row["archived_at"],
+            "clean_text": row["clean_text"],
+            "source": row["source"],
+            "themes": self._entry_segment_records(db, str(entry_id)),
+        }
+        return record
 
     def _latest_cleaning_style(self, db: sqlite3.Connection) -> dict[str, Any] | None:
         row = db.execute(
@@ -679,11 +972,13 @@ class DiaryStore:
                 candidates.setdefault(row["id"], dict(row))
             for candidate in candidates.values():
                 candidate["segments"] = self._entry_segment_records(db, str(candidate["id"]))
+                candidate["decision"] = self._decision_record(db, str(candidate["id"]))
 
         scored = []
         for row in candidates.values():
             text = row.get("clean_text") or row.get("raw_text") or ""
-            semantic = _cosine(query_vec, _ngrams(text))
+            searchable_text = f"{text} {self._decision_search_text(row['decision'])}" if row.get("decision") else text
+            semantic = _cosine(query_vec, _ngrams(searchable_text))
             days = max(0, (_now().date() - datetime.fromisoformat(row["entry_date"]).date()).days)
             recency = 1 / (1 + days / 30)
             score = semantic * 0.82 + recency * 0.18
@@ -716,6 +1011,7 @@ class DiaryStore:
                     "score": round(score, 4),
                     "text": snippet,
                     "segments": row.get("segments", []),
+                    "decision": row.get("decision"),
                 }
             )
             used += len(snippet)
@@ -734,6 +1030,7 @@ class DiaryStore:
         links: list[dict[str, Any]] | None = None,
         followups: list[dict[str, Any]] | None = None,
         goal_interpretations: list[dict[str, Any]] | None = None,
+        decision: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         self.initialize()
         clean = clean_text.strip()
@@ -758,11 +1055,18 @@ class DiaryStore:
                     seen.add(normalized)
             normalized_segments.append({"position": position, "text": text, "theme": theme, "tags": tags})
         with self.connect() as db:
-            current = db.execute("SELECT id,status,raw_text FROM entries WHERE id=?", (entry_id,)).fetchone()
+            current = db.execute("SELECT id,status,raw_text,entry_type FROM entries WHERE id=?", (entry_id,)).fetchone()
             if not current:
                 raise KeyError(entry_id)
             if current["status"] == "confirmed":
                 raise ValueError("confirmed entries cannot be overwritten through preview")
+            normalized_decision = None
+            if current["entry_type"] == "decision":
+                if decision is None:
+                    raise ValueError("decision entries require a structured decision preview")
+                normalized_decision = self._normalize_decision_payload(decision)
+            elif decision is not None:
+                raise ValueError("only decision entries may include a decision payload")
             normalized_goal_interpretations = self._validate_goal_interpretations(
                 db,
                 current,
@@ -777,6 +1081,8 @@ class DiaryStore:
                 "followups": followups or [],
                 "goal_interpretations": normalized_goal_interpretations,
             }
+            if normalized_decision is not None:
+                preview["decision"] = normalized_decision
             db.execute("UPDATE entries SET status='preview',clean_text=?,preview_json=?,updated_at=? WHERE id=?", (clean, _json(preview), _iso(), entry_id))
             db.commit()
         (self.paths.drafts / f"{entry_id}.json").write_text(_json({"entry_id": entry_id, "status": "preview", "preview": preview}), encoding="utf-8")
@@ -793,6 +1099,11 @@ class DiaryStore:
             if row["status"] != "preview" or not row["clean_text"]:
                 raise ValueError("entry must have a preview before confirmation")
             preview = json.loads(row["preview_json"])
+            decision_payload = None
+            if row["entry_type"] == "decision":
+                if not isinstance(preview.get("decision"), dict):
+                    raise ValueError("decision entries require a structured decision preview")
+                decision_payload = self._normalize_decision_payload(preview["decision"])
             goal_interpretations = self._validate_goal_interpretations(
                 db,
                 row,
@@ -867,8 +1178,48 @@ class DiaryStore:
                         "INSERT INTO followups(id,entry_id,question,status,revisit_after,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
                         (str(uuid.uuid4()), entry_id, question, followup.get("status", "pending"), followup.get("revisit_after"), _iso(), _iso()),
                     )
-            preview = {**preview, "segments": stored_segments}
             confirmed_at = _iso()
+            decision_id = None
+            if decision_payload is not None:
+                decision_id = str(uuid.uuid4())
+                made_at = confirmed_at if decision_payload["status"] == "made" else None
+                archived_at = made_at
+                decision_payload = {
+                    **decision_payload,
+                    "decision_id": decision_id,
+                    "made_at": made_at,
+                    "archived_at": archived_at,
+                }
+                timeline = decision_payload["timeline"]
+                db.execute(
+                    """INSERT INTO decisions(
+                           id,entry_id,status,objective,options_json,opportunity_cost_json,likely_regret_json,
+                           assumptions_json,smallest_experiment_json,recommendation_json,review_date,due_date,
+                           timeline_notes,made_at,archived_at,created_at,updated_at
+                       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        decision_id,
+                        entry_id,
+                        decision_payload["status"],
+                        decision_payload["objective"],
+                        _json(decision_payload["options"]),
+                        _json(decision_payload["opportunity_cost"]),
+                        _json(decision_payload["likely_regret"]),
+                        _json(decision_payload["assumptions"]),
+                        _json(decision_payload["smallest_experiment"]),
+                        _json(decision_payload["recommendation"]),
+                        timeline["review_date"],
+                        timeline["due_date"],
+                        timeline["notes"],
+                        made_at,
+                        archived_at,
+                        confirmed_at,
+                        confirmed_at,
+                    ),
+                )
+            preview = {**preview, "segments": stored_segments}
+            if decision_payload is not None:
+                preview["decision"] = decision_payload
             db.execute("UPDATE entries SET status='confirmed',preview_json=?,confirmed_at=?,updated_at=? WHERE id=?", (_json(preview), confirmed_at, confirmed_at, entry_id))
             db.execute("DELETE FROM entries_fts WHERE entry_id=?", (entry_id,))
             db.execute("INSERT INTO entries_fts(entry_id,clean_text,themes) VALUES(?,?,?)", (entry_id, row["clean_text"], " ".join(theme_names)))
@@ -925,21 +1276,291 @@ class DiaryStore:
                         "date": row["entry_date"],
                         "clean_text": row["clean_text"],
                         "segments": self._entry_segment_records(db, str(row["id"])),
+                        "decision": self._decision_record(db, str(row["id"])),
                     }
                 )
             goals = self._weekly_goal_context(db, start.isoformat(), end.isoformat())
             historical = self._weekly_historical_context(db, start.isoformat(), end.isoformat(), records, goals)
+            pending_decisions = self._pending_decisions(db, moment.date())
+            decision_review = self._decision_review_payload(pending_decisions, moment.date())
         return {
             "period_start": start.isoformat(),
             "period_end": end.isoformat(),
-            "has_content": bool(records),
+            "has_content": bool(records or pending_decisions),
+            "has_journal_content": bool(records),
             "entries": records,
             "goals": goals,
+            "pending_decisions": pending_decisions,
+            "decision_review": decision_review,
             "historical_connections": historical["connections"],
             "historical_query_signals": historical["query_signals"],
             "reflection_prompt_candidate": historical["reflection_prompt_candidate"],
             "theme_review": self.theme_review_context(moment),
         }
+
+    def _pending_decisions(self, db: sqlite3.Connection, reference_date: Any) -> list[dict[str, Any]]:
+        reference = reference_date if hasattr(reference_date, "isoformat") else datetime.fromisoformat(str(reference_date)).date()
+        rows = db.execute(
+            """SELECT d.id,e.id AS entry_id FROM decisions d JOIN entries e ON e.id=d.entry_id
+               WHERE d.status='pending' AND e.status='confirmed'
+               ORDER BY COALESCE(d.due_date,d.review_date,'9999-12-31'),e.entry_date,d.created_at"""
+        ).fetchall()
+        records = []
+        for row in rows:
+            record = self._decision_record(db, str(row["entry_id"]))
+            if not record:
+                continue
+            trigger_candidates = [
+                (value, label)
+                for label, value in (("review_date", record.get("review_date")), ("due_date", record.get("due_date")))
+                if value
+            ]
+            if not trigger_candidates:
+                reminder = "unscheduled"
+                days_until = None
+                trigger = None
+                trigger_kind = None
+            else:
+                trigger, trigger_kind = min(trigger_candidates, key=lambda item: item[0])
+                trigger_date = datetime.fromisoformat(str(trigger)).date()
+                days_until = (trigger_date - reference).days
+                if days_until < 0:
+                    reminder = "overdue"
+                elif days_until <= 7:
+                    reminder = "due_soon"
+                else:
+                    reminder = "scheduled"
+            record["reminder"] = reminder
+            record["days_until_review_or_due"] = days_until
+            record["next_trigger"] = trigger
+            record["next_trigger_kind"] = trigger_kind
+            records.append(record)
+        return records
+
+    def _decision_review_payload(self, pending_decisions: list[dict[str, Any]], reference_date: Any) -> dict[str, Any]:
+        reminders = [item for item in pending_decisions if item["reminder"] in {"overdue", "due_soon"}]
+        suggestions = []
+        for item in pending_decisions:
+            if item["reminder"] == "overdue":
+                action = "Finalize it, defer it with a new date, or run the smallest experiment."
+            elif item["reminder"] == "due_soon":
+                action = "Prepare the structured comparison and confirm whether the timeline still holds."
+            elif item["reminder"] == "unscheduled":
+                action = "Set a review date or explicitly keep it pending."
+            else:
+                action = "Keep the decision visible and revisit it at the scheduled review."
+            suggestions.append(
+                {
+                    "decision_id": item["decision_id"],
+                    "objective": item["objective"],
+                    "reminder": item["reminder"],
+                    "suggested_action": action,
+                }
+            )
+        return {
+            "has_pending": bool(pending_decisions),
+            "reference_date": reference_date.isoformat() if hasattr(reference_date, "isoformat") else str(reference_date),
+            "reminders": reminders,
+            "suggestions": suggestions,
+            "review_template": list(DECISION_STRUCTURE),
+            "instruction": (
+                "For each pending decision, complete the objective, options including doing nothing, "
+                "reversible and irreversible consequences, opportunity cost, one- or five-year regret, "
+                "fallible assumptions, smallest experiment, and one recommendation. Label facts, assumptions, and judgement separately."
+            ),
+        }
+
+    def decision_review_context(self, now: datetime | None = None) -> dict[str, Any]:
+        self.initialize()
+        moment = (now or _now()).astimezone(TZ)
+        with self.connect() as db:
+            pending = self._pending_decisions(db, moment.date())
+        return self._decision_review_payload(pending, moment.date()) | {"pending_decisions": pending}
+
+    def decision_context(self, query: str | None = None, status: str = "pending") -> dict[str, Any]:
+        self.initialize()
+        if status not in {"pending", "made", "all"}:
+            raise ValueError("decision status must be pending, made, or all")
+        with self.connect() as db:
+            sql = "SELECT d.entry_id FROM decisions d JOIN entries e ON e.id=d.entry_id WHERE e.status='confirmed'"
+            params: list[Any] = []
+            if status != "all":
+                sql += " AND d.status=?"
+                params.append(status)
+            sql += " ORDER BY d.updated_at DESC"
+            rows = db.execute(sql, params).fetchall()
+            records = [self._decision_record(db, str(row["entry_id"])) for row in rows]
+        records = [item for item in records if item]
+        if query:
+            vector = _ngrams(query)
+            records = [
+                item for item in records
+                if _cosine(vector, _ngrams(self._decision_search_text(item))) >= 0.08
+                or _normalize(query) in _normalize(self._decision_search_text(item))
+            ]
+        return {"has_decisions": bool(records), "status": status, "decisions": records}
+
+    def decision_change_preview(self, changes: list[dict[str, Any]]) -> dict[str, Any]:
+        self.initialize()
+        if not isinstance(changes, (list, tuple)) or not changes:
+            raise ValueError("changes must not be empty")
+        created = []
+        with self.connect() as db:
+            for item in changes:
+                if not isinstance(item, dict):
+                    raise ValueError("each decision change must be an object")
+                action = str(item.get("action", "")).strip()
+                if action not in {"update", "make", "reopen"}:
+                    raise ValueError("decision change action must be update, make, or reopen")
+                decision_id = str(item.get("decision_id", "")).strip()
+                current = db.execute(
+                    """SELECT d.*,e.status AS entry_status,e.entry_date FROM decisions d
+                       JOIN entries e ON e.id=d.entry_id WHERE d.id=?""",
+                    (decision_id,),
+                ).fetchone()
+                if not current:
+                    raise KeyError(decision_id)
+                if current["entry_status"] != "confirmed":
+                    raise ValueError("decision changes require a confirmed decision entry")
+                payload = item.get("payload") or {}
+                if not isinstance(payload, dict):
+                    raise ValueError("decision change payload must be an object")
+                if isinstance(payload.get("decision"), dict):
+                    payload = payload["decision"]
+                base = self._decision_payload_from_row(current)
+                merged = dict(base)
+                for key in ("objective", "options", "opportunity_cost", "likely_regret", "assumptions", "smallest_experiment", "recommendation"):
+                    if key in payload:
+                        merged[key] = payload[key]
+                if "timeline" in payload:
+                    merged["timeline"] = payload["timeline"]
+                for key in ("review_date", "due_date", "timeline_notes"):
+                    if key in payload:
+                        merged[key] = payload[key]
+                normalized = self._normalize_decision_payload(merged)
+                if action == "make":
+                    normalized["status"] = "made"
+                elif action == "reopen":
+                    normalized["status"] = "pending"
+                else:
+                    normalized["status"] = current["status"]
+                proposal_id = str(uuid.uuid4())
+                now = _iso()
+                db.execute(
+                    """INSERT INTO decision_change_proposals(
+                           id,decision_id,action,payload_json,evidence_json,status,created_at
+                       ) VALUES(?,?,?,?,?,'proposed',?)""",
+                    (
+                        proposal_id,
+                        decision_id,
+                        action,
+                        _json({"decision": normalized}),
+                        _json(item.get("evidence") or []),
+                        now,
+                    ),
+                )
+                created.append(
+                    {
+                        "proposal_id": proposal_id,
+                        "decision_id": decision_id,
+                        "action": action,
+                        "decision": normalized,
+                        "evidence": item.get("evidence") or [],
+                        "status": "proposed",
+                    }
+                )
+            db.commit()
+        return {"proposals": created, "requires_confirmation": True}
+
+    def _apply_decision_change(self, db: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
+        current = db.execute(
+            "SELECT d.*,e.preview_json,e.entry_date,e.entry_type FROM decisions d JOIN entries e ON e.id=d.entry_id WHERE d.id=?",
+            (row["decision_id"],),
+        ).fetchone()
+        if not current:
+            raise KeyError(str(row["decision_id"]))
+        payload = json.loads(row["payload_json"] or "{}").get("decision")
+        normalized = self._normalize_decision_payload(payload or {})
+        now = _iso()
+        made_at = current["made_at"]
+        archived_at = current["archived_at"]
+        if normalized["status"] == "made" and not made_at:
+            made_at = now
+            archived_at = now
+        db.execute(
+            """UPDATE decisions SET status=?,objective=?,options_json=?,opportunity_cost_json=?,likely_regret_json=?,
+                       assumptions_json=?,smallest_experiment_json=?,recommendation_json=?,review_date=?,due_date=?,
+                       timeline_notes=?,made_at=?,archived_at=?,updated_at=? WHERE id=?""",
+            (
+                normalized["status"],
+                normalized["objective"],
+                _json(normalized["options"]),
+                _json(normalized["opportunity_cost"]),
+                _json(normalized["likely_regret"]),
+                _json(normalized["assumptions"]),
+                _json(normalized["smallest_experiment"]),
+                _json(normalized["recommendation"]),
+                normalized["timeline"]["review_date"],
+                normalized["timeline"]["due_date"],
+                normalized["timeline"]["notes"],
+                made_at,
+                archived_at,
+                now,
+                row["decision_id"],
+            ),
+        )
+        preview = json.loads(current["preview_json"] or "{}")
+        preview["decision"] = {
+            **normalized,
+            "decision_id": current["id"],
+            "made_at": made_at,
+            "archived_at": archived_at,
+        }
+        db.execute("UPDATE entries SET preview_json=?,updated_at=? WHERE id=?", (_json(preview), now, current["entry_id"]))
+        return {
+            "decision_id": current["id"],
+            "entry_id": current["entry_id"],
+            "decision_status": normalized["status"],
+            "made_at": made_at,
+            "archived_at": archived_at,
+        }
+
+    def apply_decision_changes(self, decisions: list[dict[str, Any]]) -> dict[str, Any]:
+        self.initialize()
+        if not isinstance(decisions, (list, tuple)) or not decisions:
+            raise ValueError("decisions must not be empty")
+        results = []
+        changed_entries: set[str] = set()
+        with self.connect() as db:
+            for decision in decisions:
+                proposal_id = str(decision.get("proposal_id", ""))
+                verdict = str(decision.get("decision", ""))
+                if verdict not in {"approved", "rejected"}:
+                    raise ValueError("each decision must be approved or rejected")
+                row = db.execute("SELECT * FROM decision_change_proposals WHERE id=?", (proposal_id,)).fetchone()
+                if not row:
+                    raise KeyError(proposal_id)
+                if row["status"] in {"applied", "rejected"}:
+                    results.append({"proposal_id": proposal_id, "status": row["status"], "idempotent": True})
+                    continue
+                now = _iso()
+                if verdict == "rejected":
+                    db.execute("UPDATE decision_change_proposals SET status='rejected',decided_at=? WHERE id=?", (now, proposal_id))
+                    results.append({"proposal_id": proposal_id, "status": "rejected", "idempotent": False})
+                    continue
+                details = self._apply_decision_change(db, row)
+                db.execute("UPDATE decision_change_proposals SET status='applied',decided_at=?,applied_at=? WHERE id=?", (now, now, proposal_id))
+                changed_entries.add(str(details["entry_id"]))
+                results.append({"proposal_id": proposal_id, "status": "applied", "idempotent": False, **details})
+            db.commit()
+        for entry_id in changed_entries:
+            with self.connect() as db:
+                entry = db.execute("SELECT * FROM entries WHERE id=?", (entry_id,)).fetchone()
+            if entry:
+                preview = json.loads(entry["preview_json"] or "{}")
+                clean_path = self._journal_path("weekly" if entry["entry_type"] == "weekly" else "cleaned", entry["entry_date"], entry_id)
+                self._write_clean(clean_path, dict(entry), preview)
+        return {"results": results}
 
     def _weekly_historical_context(
         self,
@@ -2017,6 +2638,7 @@ class DiaryStore:
         )
 
     def _write_clean(self, path: Path, entry: dict[str, Any], preview: dict[str, Any]) -> None:
+        decision = preview.get("decision") if entry.get("entry_type") == "decision" else None
         theme_names = []
         for segment in preview.get("segments", []):
             for name in [segment["theme"], *(segment.get("tags") or [])]:
@@ -2028,6 +2650,10 @@ class DiaryStore:
             f"date: {entry['entry_date']}",
             f"type: {entry['entry_type']}",
             "status: confirmed",
+            *([f"decision_status: {decision['status']}"] if decision else []),
+            *([f"review_date: {decision['timeline'].get('review_date') or ''}"] if decision else []),
+            *([f"due_date: {decision['timeline'].get('due_date') or ''}"] if decision else []),
+            *([f"archived_at: {decision.get('archived_at') or ''}"] if decision else []),
             "themes:",
             *[f"  - {name}" for name in theme_names],
             "---",
@@ -2044,6 +2670,8 @@ class DiaryStore:
             if segment.get("tags"):
                 lines.extend([f"Tags: {', '.join(segment['tags'])}", ""])
             lines.extend([segment["text"], ""])
+        if decision:
+            lines.extend(self._decision_markdown_lines(decision))
         if preview.get("goal_interpretations"):
             labels = {
                 "progress": "进展",
@@ -2078,3 +2706,85 @@ class DiaryStore:
             lines.extend(f"- {item['question']}" for item in preview["followups"] if item.get("question"))
             lines.append("")
         path.write_text("\n".join(lines), encoding="utf-8")
+
+    def _decision_markdown_lines(self, decision: dict[str, Any]) -> list[str]:
+        lines = [
+            "## Decision analysis",
+            "",
+            f"- Status: {decision['status']}",
+            f"- Actual objective: {decision['objective']}",
+            "",
+            "### Options",
+            "",
+        ]
+        for option in decision["options"]:
+            suffix = " (do nothing)" if option.get("is_do_nothing") else ""
+            lines.extend(
+                [
+                    f"#### {option['name']}{suffix}",
+                    "",
+                    f"- Facts: {self._inline_items(option.get('facts'))}",
+                    f"- Assumptions: {self._inline_items(option.get('assumptions'))}",
+                    f"- Reversible consequences: {self._inline_items(option.get('reversible_consequences'))}",
+                    f"- Irreversible consequences: {self._inline_items(option.get('irreversible_consequences'))}",
+                    "",
+                ]
+            )
+        opportunity = decision["opportunity_cost"]
+        lines.extend(
+            [
+                "### Opportunity cost",
+                "",
+                f"- Facts: {self._inline_items(opportunity.get('facts'))}",
+                f"- Assumptions: {self._inline_items(opportunity.get('assumptions'))}",
+                f"- Judgement: {opportunity.get('judgement', '')}",
+                "",
+                "### Likely regret",
+                "",
+                f"- In one year: {decision['likely_regret'].get('one_year', '') or 'Not specified'}",
+                f"- In five years: {decision['likely_regret'].get('five_years', '') or 'Not specified'}",
+                "",
+                "### Assumptions that could be wrong",
+                "",
+            ]
+        )
+        assumptions = decision.get("assumptions") or []
+        lines.extend([f"- {item}" for item in assumptions] or ["- None recorded."])
+        experiment = decision["smallest_experiment"]
+        lines.extend(
+            [
+                "",
+                "### Smallest experiment that would reduce uncertainty",
+                "",
+                f"- Action: {experiment.get('action', '')}",
+                f"- Uncertainty reduced: {experiment.get('uncertainty_reduced', '') or 'Not specified'}",
+                f"- Timebox: {experiment.get('timebox', '') or 'Not specified'}",
+                f"- Success signal: {experiment.get('success_signal', '') or 'Not specified'}",
+                "",
+                "### Recommendation",
+                "",
+                f"- Recommended option: {decision['recommendation']['option']}",
+                f"- Facts: {self._inline_items(decision['recommendation'].get('facts'))}",
+                f"- Assumptions: {self._inline_items(decision['recommendation'].get('assumptions'))}",
+                f"- Judgement: {decision['recommendation'].get('judgement', '')}",
+                "",
+            ]
+        )
+        timeline = decision.get("timeline") or {}
+        if timeline.get("review_date") or timeline.get("due_date") or timeline.get("notes"):
+            lines.extend(
+                [
+                    "### Timeline",
+                    "",
+                    f"- Review date: {timeline.get('review_date') or 'Not specified'}",
+                    f"- Due date: {timeline.get('due_date') or 'Not specified'}",
+                    f"- Notes: {timeline.get('notes') or 'None'}",
+                    "",
+                ]
+            )
+        return lines
+
+    @staticmethod
+    def _inline_items(items: Any) -> str:
+        values = [str(item) for item in (items or []) if str(item).strip()]
+        return "; ".join(values) if values else "None recorded"

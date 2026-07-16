@@ -15,10 +15,12 @@ SQLite at `data/diary.sqlite3` is the structured source of truth.
 - `goal_entry_links`: confirmed progress, blocker, reflection, or related evidence.
 - `entry_goal_interpretations`: AI-generated, current-entry evidence annotations persisted only with diary confirmation; separate from authoritative goal links and events.
 - `goal_change_proposals`: preview and per-item confirmation audit for goal changes.
+- `decisions`: structured pending or made decisions linked one-to-one with a confirmed `decision` entry; includes the analysis template, timeline, and archive timestamps.
+- `decision_change_proposals`: explicit preview and per-item confirmation audit for updating, making, or reopening decisions.
 - `feedback_events`: workflow friction and new requirements.
 - `skill_revisions`: Skill changes with Git snapshots.
 - `agent_runs`: compact routing and size telemetry, never hidden reasoning.
-- `entries_fts`: confirmed cleaned-text plus every Active/canonical primary theme and tag. Inactive tags are removed from theme-driven matching without removing entry full text.
+- `entries_fts`: confirmed cleaned-text plus every Active/canonical primary theme and tag. Decision analysis is also available through decision-aware local retrieval. Inactive tags are removed from theme-driven matching without removing entry full text.
 - `cleaning_style_profiles`: compact, evidence-bounded cleaning-style profiles derived from confirmed non-weekly originals; source entry ids and evidence dates are retained for audit.
 
 Markdown mirrors:
@@ -32,7 +34,7 @@ The main SQLite database and all journal Markdown files are intentionally Git-tr
 
 Theme changes never rewrite verbatim originals or confirmed cleaned Markdown. `reassign_segment` changes only the explicitly approved structured primary theme; `add_segment_tag` and `remove_segment_tag` change only explicit structured tag membership. SQLite remains authoritative when a historical Markdown theme snapshot differs after governance.
 
-`weekly-context` returns current-period entries, Active goals with separate `weekly_evidence` and non-authoritative `weekly_interpretations`, and a bounded `historical_connections` set of older segments with dates, IDs, scores, and evidence reasons. It excludes the current weekly period and returns `reflection_prompt_candidate: null` when evidence is insufficient. Weekly interpretation records retain their source entry and never mutate goal state.
+`weekly-context` returns current-period entries, Active goals with separate `weekly_evidence` and non-authoritative `weekly_interpretations`, timeline-aware `pending_decisions` plus `decision_review` suggestions, and a bounded `historical_connections` set of older segments with dates, IDs, scores, and evidence reasons. It excludes the current weekly period and returns `reflection_prompt_candidate: null` when evidence is insufficient. Weekly interpretation records retain their source entry and never mutate goal state.
 
 Goal mirror:
 

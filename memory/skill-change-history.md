@@ -80,3 +80,13 @@
 - Revision: `42d8bcd7-677c-4e9c-a22c-0b525b893651`
 - Tests: Approved clarification implemented: long_term spans multiple years; short_term is intended to finish within one year. Added four-level hierarchy and idempotent SQLite CHECK migration. Validation: /mnt/d/Project_PA/condaenv_host/bin/python -m pytest -> 21 passed; quick_validate.py -> Skill is valid; live database foreign_key_check -> no errors.
 
+## 2026-07-16T15:32:53+08:00 approved
+
+- Revision: `2dfc218a-9b42-4073-bed1-16e0f7fcef7f`
+- Tests: User explicitly approved the requested decision workflow and its proposed structure.
+
+## 2026-07-16T15:48:40+08:00 applied
+
+- Revision: `2dfc218a-9b42-4073-bed1-16e0f7fcef7f`
+- Tests: Implemented structured pending/made decisions, preview/confirm persistence, theme tags, timeline-aware weekly reminders, explicit decision changes, CLI/docs, and migration. Validation: 23 pytest tests passed, py_compile passed, quick_validate passed, git diff --check passed, SQLite integrity_check ok, foreign_key_check empty.
+

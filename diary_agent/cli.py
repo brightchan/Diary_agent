@@ -28,7 +28,7 @@ def parser() -> argparse.ArgumentParser:
 
     create = commands.add_parser("create-draft")
     create.add_argument("--text", required=True)
-    create.add_argument("--type", default="diary", choices=["diary", "weekly", "thought"])
+    create.add_argument("--type", default="diary", choices=["diary", "weekly", "thought", "decision"])
     create.add_argument("--source", default="codex")
     create.add_argument("--date")
 
@@ -55,6 +55,10 @@ def parser() -> argparse.ArgumentParser:
     preview.add_argument(
         "--goal-interpretations",
         help="JSON string or file with AI goal interpretations shown in this preview",
+    )
+    preview.add_argument(
+        "--decision",
+        help="JSON string or file with the structured decision analysis for a decision entry",
     )
 
     confirm = commands.add_parser("confirm")
@@ -96,6 +100,19 @@ def parser() -> argparse.ArgumentParser:
     goal_context = commands.add_parser("goal-context")
     goal_context.add_argument("--query")
     goal_context.add_argument("--status", default="active", choices=["active", "completed", "paused", "abandoned", "all"])
+
+    decision_review = commands.add_parser("decision-review-context")
+    decision_review.add_argument("--now", help="ISO datetime for testing")
+
+    decision_context = commands.add_parser("decision-context")
+    decision_context.add_argument("--query")
+    decision_context.add_argument("--status", default="pending", choices=["pending", "made", "all"])
+
+    decision_preview = commands.add_parser("decision-change-preview")
+    decision_preview.add_argument("--changes", required=True, help="JSON string or file")
+
+    decision_apply = commands.add_parser("apply-decision-changes")
+    decision_apply.add_argument("--decisions", required=True, help="JSON string or file")
 
     conversation = commands.add_parser("conversation-context")
     conversation.add_argument("--query", required=True)
@@ -150,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
                 load_json(args.links, []),
                 load_json(args.followups, []),
                 load_json(args.goal_interpretations, []),
+                load_json(args.decision, None),
             )
         elif args.command == "confirm":
             result = store.confirm(args.entry_id)
@@ -175,6 +193,15 @@ def main(argv: list[str] | None = None) -> int:
             result = store.apply_goal_changes(load_json(args.decisions, []))
         elif args.command == "goal-context":
             result = store.goal_context(args.query, args.status)
+        elif args.command == "decision-review-context":
+            moment = datetime.fromisoformat(args.now).replace(tzinfo=TZ) if args.now else None
+            result = store.decision_review_context(moment)
+        elif args.command == "decision-context":
+            result = store.decision_context(args.query, args.status)
+        elif args.command == "decision-change-preview":
+            result = store.decision_change_preview(load_json(args.changes, []))
+        elif args.command == "apply-decision-changes":
+            result = store.apply_decision_changes(load_json(args.decisions, []))
         elif args.command == "conversation-context":
             result = store.conversation_context(args.query, args.token_budget)
         elif args.command == "feedback-review-context":

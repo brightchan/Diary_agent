@@ -64,6 +64,18 @@ Useful replies include:
 
 Confirmed entries cannot be silently overwritten through the preview workflow. The original wording remains preserved even when the cleaned version or structured classification is corrected.
 
+### Track a decision
+
+Say explicitly that you want a choice tracked as a decision, for example:
+
+> Track this as a pending decision: whether I should accept the new role. Revisit it next week.
+
+Decision entries use the same themes and tags as diary entries, but also keep a structured analysis. The preview includes the actual objective, options including doing nothing, reversible and irreversible consequences, opportunity cost, likely regret in one or five years, assumptions that could be wrong, the smallest experiment that would reduce uncertainty, and one recommendation. Facts, assumptions, and the agent's judgement are shown separately.
+
+If you provide only the choice or objective, Codex fills the missing analysis from your wording and bounded local context, labels those additions as agent analysis, and asks you to confirm the completed preview. A pending decision stays open for future consideration; a made decision is archived for future reference. You can later ask to update, make, or reopen a decision, but those changes are explicit proposals and never rewrite the original wording.
+
+Give a decision a review date or due date when timing matters. Weekly review will surface overdue and upcoming pending decisions with a suggested next action: finalize, defer with a new date, run the smallest experiment, or leave it pending.
+
 ### Recall and search your history
 
 Ask natural questions such as:
@@ -85,6 +97,7 @@ The weekly workflow summarizes the previous Monday through Sunday when confirmed
 - related patterns or changed views from older entries;
 - goal progress, blockers, and possible adjustments;
 - unfinished threads and practical next-week actions;
+- pending decisions with timeline-aware reminders and structured recommendations;
 - two to five optional reflection questions.
 
 The weekly journal is also preview-first and requires confirmation. Goal changes and theme changes suggested by a weekly review are separate proposals; confirming the weekly journal does not apply them. After the review preview is generated, and again after confirmation or later corrections, the agent commits the complete repository state and pushes the current branch.
@@ -243,6 +256,8 @@ python3 .agents/skills/record-life-journal/scripts/journal.py --root . save-prev
 
 Segments stay in narrative order. Each requires a primary `theme`; `tags` are optional, deduplicated, and must not repeat the primary theme. Goal interpretations are optional, use only Active goals, require evidence from this entry, and can be corrected or removed by saving the preview again. Ordinary entries may have at most one optional follow-up question.
 
+For a decision draft, create it with `create-draft --type decision` and pass a JSON decision payload through `save-preview --decision`. The payload must include a do-nothing option and the full analysis structure described above. Missing analysis should be filled by Codex and shown for confirmation before saving.
+
 Confirm only after the user explicitly approves the displayed version:
 
 ```bash
@@ -258,6 +273,8 @@ Update a follow-up independently when the user answers, skips, or defers it:
 python3 -m diary_agent.cli --root . update-followup \
   --followup-id '<uuid>' --status deferred --revisit-after '2026-08-01'
 ```
+
+Review pending decisions with `decision-review-context` or through `weekly-context`. To revise, make, or reopen one, first run `decision-change-preview`, show the proposed structure, then apply only the user's explicit per-item decisions with `apply-decision-changes`.
 
 ### Search and contextual retrieval
 
