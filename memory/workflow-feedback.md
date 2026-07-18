@@ -65,3 +65,8 @@
 - ID: `bfd13a32-8e78-4d2c-8556-efdb7c60c142`
 - Add first-class decisions: pending or made/archived, reusable theme tags, structured decision analysis with facts/assumptions/judgement separation, timeline-aware weekly reminders, agent-filled previews requiring confirmation, and explicit pending-to-made changes.
 
+## 2026-07-18T23:27:14+08:00 [feature_request]
+
+- ID: `42e99deb-430b-465b-9c27-b29f705fa40c`
+- 正式启用 thought 作为与 diary 区分的一等记录类型。普通用户输入以整次输入为分类单位，只能整体归为 thought 或 diary，不按段落拆成不同记录类型；物理学、生物学、人生、哲学等属于主题或标签而不是 entry type。预览必须显示并允许在确认前纠正类型，搜索与周度回顾应能区分两类。将 D:\Project_PA\data\project_pa.db 中 user_id=2、已确认且 category=THOUGHT（大小写不敏感）的 9 条输入按原始类型、原始日期和原文迁移到本地系统，排除 testuser，并保持预览确认、去重和来源审计。完成后在仓库 README 记录用户用法、分类边界、迁移和维护方式。
+
