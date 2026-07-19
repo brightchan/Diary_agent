@@ -1,0 +1,17 @@
+{
+  "feedback_ids": [
+    "c5cdf7f0-7970-46c4-b04d-dcf2382dd420"
+  ],
+  "problem_summary": "当前 Skill 会清洗、分类、连接和预览 thought，但没有规定在用户提出想法后先进行一轮简短、平衡、有证据边界的思想回应，也没有明确讨论过程中原想法、用户指定内容与双方观点整理稿之间的最终入库选择。",
+  "impact": "用户现在无法稳定获得一段 100 到 200 字、兼顾支持与反驳、优点与局限、相关观点与证据及历史想法联系的回应；若立即生成最终预览，又可能抢在用户决定真正要保存的版本之前。",
+  "proposed_diff": "1. 在 SKILL.md 增加核心章节“Develop a thought before confirmation”：识别为 thought 后先创建原文草稿，再用 100-200 个中文字符（含标点）的独立回应讨论该想法；在有意义且有依据时同时给出支持与反驳，指出优点、局限、适用边界，并连接最密切的观点、证据和已确认的过往 thought。\n2. 规定回应只使用有依据的本地检索结果或可核实证据；引用过往想法时标日期，区分用户观点、外部/历史证据和 Agent 推断；没有可靠反方、证据或历史联系时明确说不足，不为凑结构而编造。\n3. 规定讨论回应与用户原文分离，不自动写进 clean_text。原想法默认成为待确认候选，但不抢先最终确认；用户随后可选择：原想法、明确指定的内容、或“总结整理我和你的观点”生成的综合稿。综合稿须清楚区分用户观点与 Agent 补充，并再次展示普通 thought 预览。\n4. 明确控制语句：用户说“直接入库/不用讨论”时，跳过或结束拓展，使用原想法进入现有预览确认流程；用户说“不入库/不用入库”时不得确认；“直接入库”表示跳过综合整理，不绕过显式预览确认。\n5. 在 references/agent-protocol.md 增加 thought-development 输出契约和检索/证据边界；在 README.md 的 thought 用户流程与 Agent 协议中说明这一交互。无需改变 SQLite schema、CLI 或确认命令。",
+  "compatibility": "保持原文草稿、whole-input thought 分类、保守清洗、单一预览以及显式确认后才最终存储等现有不变量。旧 thought、SQLite schema、Markdown 格式和 CLI 完全兼容；新增的是 Codex 的交互顺序与回复契约。“直接入库”只缩短讨论，不取消现有确认边界。",
+  "tests": [
+    "运行 skill-creator quick_validate.py 验证 Skill 元数据与结构",
+    "运行完整 pytest 测试，确认现有 draft -> preview -> confirm 行为无回归",
+    "静态检查 SKILL.md、agent-protocol.md 与 README.md 对 100-200 字、双向论证、证据/历史想法边界和四种入库选择的表述一致",
+    "手工前向场景：普通 thought 得到 100-200 字回应且不自动确认；用户要求总结双方观点时展示综合稿预览；用户说直接入库时仍经过预览确认；用户说不入库时不确认",
+    "运行 git diff --check"
+  ],
+  "token_cost_change": "increase with reason: 每个 thought 默认增加 100-200 字分析，并可能进行一次有界的本地 thought 检索；通过只连接最密切且真正相关的证据、找不到则停止，限制额外上下文与输出成本。"
+}
