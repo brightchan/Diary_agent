@@ -1,0 +1,332 @@
+{
+  "version": 1,
+  "source_database": "/mnt/d/Project_PA/data/project_pa.db",
+  "source_sha256": "7c226f880ef83c67e566f341da49ad8e0bb808156a8fa266716c372ae569aa91",
+  "source_filter": "user_id=2 AND lower(category)='thought' AND user_confirmed=1 AND content nonempty",
+  "record_count": 9,
+  "excluded_testuser_count": 2,
+  "preview_report": "/mnt/d/Diary_agent/data/imports/project_pa_thoughts_preview.md",
+  "preview_report_sha256": "951ce47e355590220ef9a45b9467a6a468b82ef1785da2e9b51a93eb66a16c86",
+  "confirmation_status": "confirmed",
+  "approved_preview_sha256": "951ce47e355590220ef9a45b9467a6a468b82ef1785da2e9b51a93eb66a16c86",
+  "backup": {
+    "database": "/mnt/d/Diary_agent/data/backups/diary-20260719-091941.sqlite3",
+    "sha256": "6bbff2c9d06cb30fe38a3b75e6a31471778938a17d43f59242303e6de5dafee5",
+    "manifest": "/mnt/d/Diary_agent/data/backups/diary-20260719-091941.sha256"
+  },
+  "records": [
+    {
+      "source_id": 30,
+      "source_uuid": "7a8e2524-343c-4f67-8c1f-c11e50fa9721",
+      "source_created_at": "2026-04-13T20:33:40.876979+08:00",
+      "source_updated_at": "2026-04-13 20:33:40.876987",
+      "source_topic": "管理",
+      "source_category": "THOUGHT",
+      "source_key": "project_pa:entries:30@2026-04-13T20:33:40.876979+08:00",
+      "raw_sha256": "d212405f514dd4fbfdf6ed8500d0c327816032197cfcd7c2b921e51dba7f83ee",
+      "entry_date": "2026-04-13",
+      "target_entry_id": "3ab1a8ed-b3e4-4979-8281-cfde866f9d35",
+      "entry_type": "thought",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "明天要面试三个人，主要都是生信工程师。我觉得除了技术以外，更重要的其实还是能不能聊得来，有没有责任心，有没有主观能动性。就像我现在这个学生，他其实非常主动的去做很多事情，我很喜欢跟这样的人合作，因为你需要的不是一双手，而是一个能独立运转的像agent一样的大脑。今天看了小林说他跟多邻国的CEO聊，说到了到年纪大的时候，你可能更看重的是一个人的家庭、他的背景这些东西，而不会说那么多细节的问题。因为那种背景能告诉你他会是怎样的人，值不值得信任，这比那些技术细节更重要",
+          "theme": "艾名",
+          "tags": [
+            "招聘",
+            "学生指导"
+          ]
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/Diary_agent/journals/originals/2026/04/2026-04-13--3ab1a8ed-b3e4-4979-8281-cfde866f9d35.md",
+      "clean_path": "/mnt/d/Diary_agent/journals/cleaned/2026/04/2026-04-13--3ab1a8ed-b3e4-4979-8281-cfde866f9d35.md"
+    },
+    {
+      "source_id": 32,
+      "source_uuid": "6ae3a543-c34f-47ca-9ddb-2631e6bfa336",
+      "source_created_at": "2026-04-15T21:17:39.007771+08:00",
+      "source_updated_at": "2026-04-15 21:17:39.007801",
+      "source_topic": "艾名",
+      "source_category": "THOUGHT",
+      "source_key": "project_pa:entries:32@2026-04-15T21:17:39.007771+08:00",
+      "raw_sha256": "b66ccb93fee550fc324842a7e75b8700c17fae52c9490da8d486a5a47b997550",
+      "entry_date": "2026-04-15",
+      "target_entry_id": "f801a6ac-b53a-40ea-957e-842f93913743",
+      "entry_type": "thought",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "对于艾名要做这个虚拟器官的问题，觉得根据这个《做对产品》这本书里面讲的，我们一定要先搞清楚市场是不是存在，谁会负责给钱，然后确定这个产品或者创意应该是怎么样的，找到\"正确的它\"，这一步非常关键。",
+          "theme": "艾名",
+          "tags": [
+            "公司战略",
+            "类器官"
+          ]
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/Diary_agent/journals/originals/2026/04/2026-04-15--f801a6ac-b53a-40ea-957e-842f93913743.md",
+      "clean_path": "/mnt/d/Diary_agent/journals/cleaned/2026/04/2026-04-15--f801a6ac-b53a-40ea-957e-842f93913743.md"
+    },
+    {
+      "source_id": 38,
+      "source_uuid": "45d9c440-4703-4bf4-a7de-2ecce00eff1a",
+      "source_created_at": "2026-04-16T22:14:06.640401+08:00",
+      "source_updated_at": "2026-04-16 22:14:06.640432",
+      "source_topic": "艾名",
+      "source_category": "THOUGHT",
+      "source_key": "project_pa:entries:38@2026-04-16T22:14:06.640401+08:00",
+      "raw_sha256": "130967604891bfa4880a3db0823de83a1ff4a4b5491f71d0c32cc87c6381bd2e",
+      "entry_date": "2026-04-16",
+      "target_entry_id": "37587fe8-90d4-4525-9e6b-f69f8548659d",
+      "entry_type": "thought",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "在杭州 20k 左右还是有不少有深度学习经验的比较短工作经验的人。就算这轮不招下一轮估计也不难找到。这一轮 15k 左右找一个能踏实干生信杂活的人估计就差不多了，不要想太多。履历太好的也容易走，后面还麻烦。",
+          "theme": "艾名",
+          "tags": [
+            "招聘"
+          ]
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/Diary_agent/journals/originals/2026/04/2026-04-16--37587fe8-90d4-4525-9e6b-f69f8548659d.md",
+      "clean_path": "/mnt/d/Diary_agent/journals/cleaned/2026/04/2026-04-16--37587fe8-90d4-4525-9e6b-f69f8548659d.md"
+    },
+    {
+      "source_id": 39,
+      "source_uuid": "38d8276b-19fa-4924-b7f8-b7599c134879",
+      "source_created_at": "2026-04-17T09:01:04.617013+08:00",
+      "source_updated_at": "2026-04-17 09:01:04.617020",
+      "source_topic": "艾名",
+      "source_category": "THOUGHT",
+      "source_key": "project_pa:entries:39@2026-04-17T09:01:04.617013+08:00",
+      "raw_sha256": "fec288dc903c823fd42015b535d5ca775f1c2b14c2f51817c4129dd8e52d1dd6",
+      "entry_date": "2026-04-17",
+      "target_entry_id": "35973fe8-046a-4650-9113-6ad58bbc77fb",
+      "entry_type": "thought",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "过去两周面试了两拨人，就是一波是软件工程的。当时想的是要招一些会数据库啊，会网页啊，会服务器什么的。但是后来跟他们聊，觉得好像语言还是有点不一样。我不太清楚他们的实力，他们好像也很专某一个技术栈，然后似乎不太搭调，我也很难领导这种人。于是，我就改变了策略，去教生物信息相关的这些人聊的还是比较顺畅，因为毕竟大家语言比较统一，但是可能前期要求有点高，写的薪资也比较高，来的人确实非常有能力啊，我觉得但是他们的薪酬要求超出了我们期望范围。后来降低了要求，其实还是有很多简历，而且也能找到相对不错的，所以就觉得曾经想招人还是有点类似我们现在在国外这种想法啊，招一个，然后长期主义好好培养。但是国内这种环境，年轻人也经常裸辞。我这次看到的简历可能有3分1都是没有在工作的状态了。那你招回来一个人，你培养了，可能过段时间不开心了，或怎样想不通了就走了，那也是很大的损失。那我觉得没必要啊，你就需要什么坑就找一个什么萝卜。确实国内人太多了，你不干有的是人干，没必要这么煞费苦心的去找说很吻合的人，然后去很努力的培养他。甚至在一个月两万左右的情况下，都能招到会一点深度学习的这种人。那其实，如果后续我们真的要往AI做的话，再招估计也来得及。难怪就是说，国内这些人都很短视，没有想那么长远，因为根本不需要，也没办法想长远。大家都是很短期的这种合作关系。",
+          "theme": "艾名",
+          "tags": [
+            "招聘"
+          ]
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/Diary_agent/journals/originals/2026/04/2026-04-17--35973fe8-046a-4650-9113-6ad58bbc77fb.md",
+      "clean_path": "/mnt/d/Diary_agent/journals/cleaned/2026/04/2026-04-17--35973fe8-046a-4650-9113-6ad58bbc77fb.md"
+    },
+    {
+      "source_id": 41,
+      "source_uuid": "ec4979ed-ee51-4dd6-ba8f-301ec30a385a",
+      "source_created_at": "2026-04-18T09:21:13.995399+08:00",
+      "source_updated_at": "2026-04-18 09:21:13.995413",
+      "source_topic": "西风",
+      "source_category": "THOUGHT",
+      "source_key": "project_pa:entries:41@2026-04-18T09:21:13.995399+08:00",
+      "raw_sha256": "046714ea47912b3b262ede6d06cf39e0f85af7584672c70ce379202348e8385a",
+      "entry_date": "2026-04-18",
+      "target_entry_id": "14aa5e40-102f-4171-b1aa-1c18e8314870",
+      "entry_type": "thought",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "西风说， 用传统“创造新需求-消费者买单”的模型无法理解当前火热的AI投资，因为最终接盘的消费者其实被AI本身消灭了。所以其真正的驱动力是企业间由“恐惧”驱动的、类似军备竞赛的博弈逻辑。作为个体或企业家，不必过度担忧这个“击鼓传花”的游戏最终能否闭环或是否健康。关键在于识别并抓住这个过程中“雁过拔毛”的财富重分配机会。在这个过程中利用趋势（如同军火商在冲突中获利）为自身谋取利益是务实的选择。",
+          "theme": "AI与组织变革",
+          "tags": [
+            "财富",
+            "公司战略"
+          ]
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/Diary_agent/journals/originals/2026/04/2026-04-18--14aa5e40-102f-4171-b1aa-1c18e8314870.md",
+      "clean_path": "/mnt/d/Diary_agent/journals/cleaned/2026/04/2026-04-18--14aa5e40-102f-4171-b1aa-1c18e8314870.md"
+    },
+    {
+      "source_id": 42,
+      "source_uuid": "572d2bf9-990b-494b-8894-47d7c717847f",
+      "source_created_at": "2026-04-19T23:16:28.616048+08:00",
+      "source_updated_at": "2026-04-19 23:16:28.616059",
+      "source_topic": "艾名",
+      "source_category": "THOUGHT",
+      "source_key": "project_pa:entries:42@2026-04-19T23:16:28.616048+08:00",
+      "raw_sha256": "d1b041d7641e2c6a8ed13d2dfbf281ccdf77957f478dda34b41f1461bc32ebaa",
+      "entry_date": "2026-04-19",
+      "target_entry_id": "52672b00-03b5-4312-a621-697bbfc485a1",
+      "entry_type": "thought",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "今天跟明亮聊了聊他的主要规划方向，到底虚拟器官是为何而设计。本来昨天是明亮问我是不是要聊聊待遇问题，但是我说我更重视项目和方向。今天的结论概括来说就是要用虚拟器官作为主要的differentiator，在类器官这个赛道脱颖而出。",
+          "theme": "艾名",
+          "tags": [
+            "公司战略",
+            "类器官"
+          ]
+        },
+        {
+          "position": 1,
+          "text": "主要三个大的方向。一个是药物相关的预测，包括新老药物及中药的毒性和药理药效预测，在临床短包括药敏和副作用预测。这个是作为服务型CRO一样的公司去服务药厂。是要针对药企的需求灵活改变的。我觉得这个应当是收益比较低，但是可靠且风险可控的方向。而且这个可以作为累积信用、合作伙伴和数据底座的方向，是个需要持续发力的地方。重点就是怎么减少开发成本，尽量服务更多客户，并且在此过程中收集各种数据，完善虚拟器官模型。",
+          "theme": "艾名",
+          "tags": [
+            "公司战略",
+            "类器官"
+          ]
+        },
+        {
+          "position": 2,
+          "text": "第二个是再生医学的方向，分化出稳定的安全的心肌和神经细胞，把艾名做成药企。这也是千亿市值的重点。我感觉这个应该是高风险项目，而且周期比较长。要把这个项目切分成阶段性的目标逐步实现。",
+          "theme": "艾名",
+          "tags": [
+            "公司战略",
+            "类器官"
+          ]
+        },
+        {
+          "position": 3,
+          "text": "第三个是支线任务但也非常重要，就是要实现一些国家机器的任务。这方面包括申请国家经费做国家课题，让自己被国家看见，也包括去打入中央，了解清楚中央的需求。",
+          "theme": "艾名",
+          "tags": [
+            "公司战略",
+            "类器官"
+          ]
+        },
+        {
+          "position": 4,
+          "text": "他提到一点我比较认可的就是国内的医生资源丰富，有非常多的落地场景。同理，药企也正在成长，也会有很多合作机会。他也说国内的高校有更多产学研转化的压力，发文章在升迁中的作用正在降低，而国家正在奖励能转化的能带来产业的成果。所以艾名可以作为这个产学研转化器去负责落地。",
+          "theme": "艾名",
+          "tags": [
+            "公司战略",
+            "类器官"
+          ]
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/Diary_agent/journals/originals/2026/04/2026-04-19--52672b00-03b5-4312-a621-697bbfc485a1.md",
+      "clean_path": "/mnt/d/Diary_agent/journals/cleaned/2026/04/2026-04-19--52672b00-03b5-4312-a621-697bbfc485a1.md"
+    },
+    {
+      "source_id": 43,
+      "source_uuid": "185cef9f-8cca-47b0-a289-65eb79757f7e",
+      "source_created_at": "2026-04-20T08:20:36.372405+08:00",
+      "source_updated_at": "2026-04-20 08:20:36.372413",
+      "source_topic": "艾名",
+      "source_category": "THOUGHT",
+      "source_key": "project_pa:entries:43@2026-04-20T08:20:36.372405+08:00",
+      "raw_sha256": "0fd3deee04d4fed291373ec3e1e46e49b5341292cdf660c607b177ae8329b721",
+      "entry_date": "2026-04-20",
+      "target_entry_id": "ab002fee-786e-434c-8877-4bc67519784b",
+      "entry_type": "thought",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "昨天还跟王老师聊起我要去艾名的事。他确实是站在我的角度去考虑，希望我还是要家庭为重，陪伴好小孩的成长。在股权分配还有待遇上要在商言商，不吃亏也不占便宜。他也说其实明亮还是很需要情绪价值的，但是他会敲打明亮，告诉他什么是正确的选择。有时候明亮还说不想干了，他就说艾名就是明亮，明亮就是艾名，不干就没了，而且不能太一言堂，要在董事会上讨论，多借助大家的力量。这也是我需要考虑的如何处理好这种关系。",
+          "theme": "艾名",
+          "tags": [
+            "家庭",
+            "公司战略"
+          ]
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/Diary_agent/journals/originals/2026/04/2026-04-20--ab002fee-786e-434c-8877-4bc67519784b.md",
+      "clean_path": "/mnt/d/Diary_agent/journals/cleaned/2026/04/2026-04-20--ab002fee-786e-434c-8877-4bc67519784b.md"
+    },
+    {
+      "source_id": 51,
+      "source_uuid": "9e130830-1243-40b7-b945-7809804d2877",
+      "source_created_at": "2026-04-25T10:39:55.411414+08:00",
+      "source_updated_at": "2026-04-25 10:39:55.411420",
+      "source_topic": "人生",
+      "source_category": "THOUGHT",
+      "source_key": "project_pa:entries:51@2026-04-25T10:39:55.411414+08:00",
+      "raw_sha256": "8c466d83aaae939aabc951dc216cb890d3bd5868f289e3f94eca7cc862099ea4",
+      "entry_date": "2026-04-25",
+      "target_entry_id": "f567548a-c9ac-4b92-b307-a8f46fbffc9d",
+      "entry_type": "thought",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "我今天读到万维钢说德国一位社会学家Hartmut Rosa提到人生必须要有个Mission， 而找到Resonance是实现这个使命过程中非常重要的陪伴，让你不再孤单，也让你保持活力。争取实现高使命，高共鸣的人生，把自己围绕在志同道合的人身边，才能更好地真正实现自我。",
+          "theme": "人生目标与价值观",
+          "tags": [
+            "个人与家庭成长"
+          ]
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/Diary_agent/journals/originals/2026/04/2026-04-25--f567548a-c9ac-4b92-b307-a8f46fbffc9d.md",
+      "clean_path": "/mnt/d/Diary_agent/journals/cleaned/2026/04/2026-04-25--f567548a-c9ac-4b92-b307-a8f46fbffc9d.md"
+    },
+    {
+      "source_id": 65,
+      "source_uuid": "e251b895-2b61-46cb-956f-ed3bad00a1e5",
+      "source_created_at": "2026-05-06T23:39:20.433338+08:00",
+      "source_updated_at": "2026-05-06 23:39:20.433408",
+      "source_topic": "思维",
+      "source_category": "THOUGHT",
+      "source_key": "project_pa:entries:65@2026-05-06T23:39:20.433338+08:00",
+      "raw_sha256": "24b39b05cf3b1282ffb9f943c623e5e149235cdedb61628252600467bd3be996",
+      "entry_date": "2026-05-06",
+      "target_entry_id": "0a7830c9-6cc1-4c11-b66a-e0154de5de55",
+      "entry_type": "thought",
+      "status": "confirmed",
+      "clean_unchanged": true,
+      "segments": [
+        {
+          "position": 0,
+          "text": "人的智商本身不是重点，因为人脑子的智商就像模型的版本一样，可能有些人用很厉害的模型，有些人用很一般的模型，但是真正拉开差距的是你怎么用它，就是你的harness，你的思维模式，你的行为习惯等等，才是决定你能不能完全用出你智商的上限。这些Harness. 这些行为习惯、思维模式等等，是可以后天学习的，也是可以传授的，这才是人应该努力的主要方向",
+          "theme": "人生目标与价值观",
+          "tags": [
+            "知识边界",
+            "AI工具与工作流"
+          ]
+        }
+      ],
+      "uncertainties": [],
+      "links": [],
+      "followups": [],
+      "original_path": "/mnt/d/Diary_agent/journals/originals/2026/05/2026-05-06--0a7830c9-6cc1-4c11-b66a-e0154de5de55.md",
+      "clean_path": "/mnt/d/Diary_agent/journals/cleaned/2026/05/2026-05-06--0a7830c9-6cc1-4c11-b66a-e0154de5de55.md"
+    }
+  ],
+  "confirmed_at": "2026-07-19T09:20:26+08:00"
+}

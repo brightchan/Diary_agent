@@ -32,6 +32,9 @@ GOAL_SCOPE_LABELS = {
 }
 
 DECISION_STATUSES = ("pending", "made")
+ORDINARY_ENTRY_TYPES = ("diary", "thought")
+USER_ENTRY_TYPES = (*ORDINARY_ENTRY_TYPES, "decision")
+SEARCH_ENTRY_TYPES = ("diary", "thought", "decision", "weekly")
 DECISION_STRUCTURE = (
     "objective",
     "options",
@@ -561,6 +564,7 @@ class DiaryStore:
         return {
             "entry_id": entry_id,
             "entry_date": date_text,
+            "entry_type": entry_type,
             "routing_decision": routing,
             "context": context,
             "goal_context": goal_context,
@@ -575,7 +579,13 @@ class DiaryStore:
         uncertain = bool(UNCERTAINTY_RE.search(text))
         continuity = bool(CONTINUITY_RE.search(text))
         return {
-            "stages": {"clean": True, "classify": True, "continuity": True, "goal_interpretation": True},
+            "stages": {
+                "entry_type_classification": True,
+                "clean": True,
+                "classify": True,
+                "continuity": True,
+                "goal_interpretation": True,
+            },
             "delegate": {
                 "cleaner": speech_like or uncertain,
                 "classifier": multi_topic,
@@ -945,9 +955,18 @@ class DiaryStore:
             "updated_at": now,
         }
 
-    def retrieve_context(self, query: str, token_budget: int = 1800) -> list[dict[str, Any]]:
+    def retrieve_context(
+        self,
+        query: str,
+        token_budget: int = 1800,
+        entry_type: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Return a relevance-driven context set with no fixed item-count cap."""
         self.initialize()
+        if entry_type is not None:
+            entry_type = str(entry_type).strip().lower()
+            if entry_type not in SEARCH_ENTRY_TYPES:
+                raise ValueError("search entry_type must be diary, thought, decision, or weekly")
         char_budget = max(600, token_budget * 2)
         query_vec = _ngrams(query)
         terms = [term for term in re.findall(r"[\w\u4e00-\u9fff]{2,}", query) if len(term) >= 2]
@@ -957,9 +976,13 @@ class DiaryStore:
             if terms:
                 fts_query = " OR ".join(f'"{term.replace(chr(34), "")}"' for term in terms[:12])
                 try:
+                    type_clause = " AND e.entry_type=?" if entry_type else ""
+                    parameters: list[Any] = [fts_query]
+                    if entry_type:
+                        parameters.append(entry_type)
                     rows = db.execute(
-                        "SELECT e.*, bm25(entries_fts) AS rank FROM entries_fts JOIN entries e ON e.id=entries_fts.entry_id WHERE entries_fts MATCH ? AND e.status='confirmed' ORDER BY rank",
-                        (fts_query,),
+                        f"SELECT e.*, bm25(entries_fts) AS rank FROM entries_fts JOIN entries e ON e.id=entries_fts.entry_id WHERE entries_fts MATCH ? AND e.status='confirmed'{type_clause} ORDER BY rank",
+                        parameters,
                     ).fetchall()
                 except sqlite3.OperationalError:
                     rows = []
@@ -967,7 +990,13 @@ class DiaryStore:
                 rows = []
             for row in rows:
                 candidates[row["id"]] = {**dict(row), "_fts_match": True}
-            recent = db.execute("SELECT * FROM entries WHERE status='confirmed' ORDER BY entry_date DESC, confirmed_at DESC").fetchall()
+            recent_sql = "SELECT * FROM entries WHERE status='confirmed'"
+            recent_parameters: list[Any] = []
+            if entry_type:
+                recent_sql += " AND entry_type=?"
+                recent_parameters.append(entry_type)
+            recent_sql += " ORDER BY entry_date DESC, confirmed_at DESC"
+            recent = db.execute(recent_sql, recent_parameters).fetchall()
             for row in recent:
                 candidates.setdefault(row["id"], dict(row))
             for candidate in candidates.values():
@@ -1031,6 +1060,7 @@ class DiaryStore:
         followups: list[dict[str, Any]] | None = None,
         goal_interpretations: list[dict[str, Any]] | None = None,
         decision: dict[str, Any] | None = None,
+        entry_type: str | None = None,
     ) -> dict[str, Any]:
         self.initialize()
         clean = clean_text.strip()
@@ -1060,8 +1090,16 @@ class DiaryStore:
                 raise KeyError(entry_id)
             if current["status"] == "confirmed":
                 raise ValueError("confirmed entries cannot be overwritten through preview")
+            selected_entry_type = str(current["entry_type"])
+            if entry_type is not None:
+                requested_entry_type = str(entry_type).strip().lower()
+                if requested_entry_type not in USER_ENTRY_TYPES:
+                    raise ValueError("preview entry_type must be diary, thought, or decision")
+                if selected_entry_type == "weekly":
+                    raise ValueError("weekly entry types cannot be changed through user-input preview")
+                selected_entry_type = requested_entry_type
             normalized_decision = None
-            if current["entry_type"] == "decision":
+            if selected_entry_type == "decision":
                 if decision is None:
                     raise ValueError("decision entries require a structured decision preview")
                 normalized_decision = self._normalize_decision_payload(decision)
@@ -1074,6 +1112,7 @@ class DiaryStore:
                 goal_interpretations or [],
             )
             preview = {
+                "entry_type": selected_entry_type,
                 "clean_text": clean,
                 "segments": normalized_segments,
                 "uncertainties": uncertainties or [],
@@ -1083,7 +1122,10 @@ class DiaryStore:
             }
             if normalized_decision is not None:
                 preview["decision"] = normalized_decision
-            db.execute("UPDATE entries SET status='preview',clean_text=?,preview_json=?,updated_at=? WHERE id=?", (clean, _json(preview), _iso(), entry_id))
+            db.execute(
+                "UPDATE entries SET entry_type=?,status='preview',clean_text=?,preview_json=?,updated_at=? WHERE id=?",
+                (selected_entry_type, clean, _json(preview), _iso(), entry_id),
+            )
             db.commit()
         (self.paths.drafts / f"{entry_id}.json").write_text(_json({"entry_id": entry_id, "status": "preview", "preview": preview}), encoding="utf-8")
         return {"entry_id": entry_id, "status": "preview", "preview": preview}
@@ -1265,7 +1307,7 @@ class DiaryStore:
         end = this_monday - timedelta(days=1)
         with self.connect() as db:
             rows = db.execute(
-                "SELECT id,entry_date,clean_text,preview_json FROM entries WHERE status='confirmed' AND entry_type!='weekly' AND entry_date BETWEEN ? AND ? ORDER BY entry_date,created_at",
+                "SELECT id,entry_type,entry_date,clean_text,preview_json FROM entries WHERE status='confirmed' AND entry_type!='weekly' AND entry_date BETWEEN ? AND ? ORDER BY entry_date,created_at",
                 (start.isoformat(), end.isoformat()),
             ).fetchall()
             records = []
@@ -1273,6 +1315,7 @@ class DiaryStore:
                 records.append(
                     {
                         "entry_id": row["id"],
+                        "entry_type": row["entry_type"],
                         "date": row["entry_date"],
                         "clean_text": row["clean_text"],
                         "segments": self._entry_segment_records(db, str(row["id"])),
@@ -1283,12 +1326,18 @@ class DiaryStore:
             historical = self._weekly_historical_context(db, start.isoformat(), end.isoformat(), records, goals)
             pending_decisions = self._pending_decisions(db, moment.date())
             decision_review = self._decision_review_payload(pending_decisions, moment.date())
+        diary_entries = [item for item in records if item["entry_type"] == "diary"]
+        thought_entries = [item for item in records if item["entry_type"] == "thought"]
         return {
             "period_start": start.isoformat(),
             "period_end": end.isoformat(),
             "has_content": bool(records or pending_decisions),
             "has_journal_content": bool(records),
+            "has_diary_content": bool(diary_entries),
+            "has_thought_content": bool(thought_entries),
             "entries": records,
+            "diary_entries": diary_entries,
+            "thought_entries": thought_entries,
             "goals": goals,
             "pending_decisions": pending_decisions,
             "decision_review": decision_review,
@@ -2479,8 +2528,13 @@ class DiaryStore:
             "push": push,
         }
 
-    def search(self, query: str, token_budget: int = 1800) -> list[dict[str, Any]]:
-        return self.retrieve_context(query, token_budget=token_budget)
+    def search(
+        self,
+        query: str,
+        token_budget: int = 1800,
+        entry_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return self.retrieve_context(query, token_budget=token_budget, entry_type=entry_type)
 
     def backup(self) -> dict[str, str]:
         self.initialize()

@@ -2,6 +2,19 @@
 
 Use this compact contract between cleaner, classifier, continuity, and orchestrator roles.
 
+## Whole-input entry-type output
+
+Classify the complete user input once before merging the preview:
+
+```json
+{
+  "entry_type": "diary|thought|decision",
+  "reason": "short evidence-based reason tied to the input's dominant purpose"
+}
+```
+
+Use `diary` for input primarily anchored to lived events, feelings, personal status, or time-specific reflection. Use `thought` for input primarily preserving a proposition, hypothesis, conceptual question, model, interpretation, or reusable insight. Use `decision` for a meaningful pending or made choice and include the full Decision output below. Honor an explicit user type. Never classify separate segments of one input into different record types; use themes and tags for physics, biology, life, philosophy, and other subjects. Keep `weekly` for system-generated review output.
+
 ## Cleaner output
 
 ```json
@@ -54,7 +67,7 @@ Preserve narrative order. `theme` is required. `tags` is optional, deduplicated,
 }
 ```
 
-Ordinary diary output may contain at most one follow-up. Weekly output may contain 2-5.
+User-input output may contain at most one follow-up. Weekly output may contain 2-5.
 
 ## Goal-interpretation output
 
@@ -114,6 +127,7 @@ Pass arrays to `save-preview` as JSON strings or files:
 ```bash
 python .agents/skills/record-life-journal/scripts/journal.py --root . save-preview \
   --entry-id '<uuid>' \
+  --entry-type 'diary|thought|decision' \
   --clean-text '<preview text>' \
   --segments '[{"text":"...","theme":"...","tags":["..."]}]' \
   --uncertainties '[]' --links '[]' --followups '[]' \

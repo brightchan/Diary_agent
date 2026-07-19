@@ -47,6 +47,7 @@ def parser() -> argparse.ArgumentParser:
 
     preview = commands.add_parser("save-preview")
     preview.add_argument("--entry-id", required=True)
+    preview.add_argument("--entry-type", choices=["diary", "thought", "decision"])
     preview.add_argument("--clean-text", required=True)
     preview.add_argument("--segments", required=True, help="JSON string or file")
     preview.add_argument("--uncertainties")
@@ -67,6 +68,7 @@ def parser() -> argparse.ArgumentParser:
     search = commands.add_parser("search")
     search.add_argument("--query", required=True)
     search.add_argument("--token-budget", type=int, default=1800)
+    search.add_argument("--type", default="all", choices=["all", "diary", "thought", "decision", "weekly"])
 
     feedback = commands.add_parser("add-feedback")
     feedback.add_argument("--text", required=True)
@@ -168,11 +170,12 @@ def main(argv: list[str] | None = None) -> int:
                 load_json(args.followups, []),
                 load_json(args.goal_interpretations, []),
                 load_json(args.decision, None),
+                args.entry_type,
             )
         elif args.command == "confirm":
             result = store.confirm(args.entry_id)
         elif args.command == "search":
-            result = store.search(args.query, args.token_budget)
+            result = store.search(args.query, args.token_budget, None if args.type == "all" else args.type)
         elif args.command == "add-feedback":
             result = store.add_feedback(args.text, args.kind, args.entry_id)
         elif args.command == "update-followup":

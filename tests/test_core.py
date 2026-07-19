@@ -106,7 +106,13 @@ class DiaryStoreTests(unittest.TestCase):
         draft = self.store.create_draft("嗯，今天我继续整理日记系统。另外也去跑步了。")
         self.assertEqual(
             draft["routing_decision"]["stages"],
-            {"clean": True, "classify": True, "continuity": True, "goal_interpretation": True},
+            {
+                "entry_type_classification": True,
+                "clean": True,
+                "classify": True,
+                "continuity": True,
+                "goal_interpretation": True,
+            },
         )
         self.assertTrue(draft["routing_decision"]["delegate"]["cleaner"])
         original = next((self.root / "journals" / "originals").rglob("*.md"))
@@ -128,6 +134,85 @@ class DiaryStoreTests(unittest.TestCase):
         with self.store.connect() as db:
             self.assertEqual(db.execute("SELECT count(*) FROM segments").fetchone()[0], 2)
             self.assertEqual(db.execute("SELECT count(*) FROM followups").fetchone()[0], 1)
+
+    def test_whole_input_thought_type_preview_search_weekly_and_markdown(self):
+        text = "细胞命运可能更适合被理解为吸引子状态，而不是固定分类。这个模型还需要寻找反例。"
+        draft = self.store.create_draft(text, entry_date="2026-07-10")
+        self.assertEqual(draft["entry_type"], "diary")
+        preview = self.store.save_preview(
+            draft["entry_id"],
+            text,
+            [
+                {"text": "细胞命运可能更适合被理解为吸引子状态，而不是固定分类。", "theme": "生物学"},
+                {"text": "这个模型还需要寻找反例。", "theme": "科学方法"},
+            ],
+            entry_type="thought",
+        )
+        self.assertEqual(preview["preview"]["entry_type"], "thought")
+        with self.store.connect() as db:
+            row = db.execute("SELECT entry_type,status FROM entries WHERE id=?", (draft["entry_id"],)).fetchone()
+            self.assertEqual(tuple(row), ("thought", "preview"))
+            self.assertEqual(db.execute("SELECT count(*) FROM entries").fetchone()[0], 1)
+
+        result = self.store.confirm(draft["entry_id"])
+        markdown = Path(result["clean_path"]).read_text(encoding="utf-8")
+        self.assertIn("type: thought", markdown)
+        self.assertTrue(any(item["entry_id"] == draft["entry_id"] for item in self.store.search("吸引子", entry_type="thought")))
+        self.assertFalse(self.store.search("吸引子", entry_type="diary"))
+        with self.assertRaisesRegex(ValueError, "search entry_type"):
+            self.store.search("吸引子", entry_type="physics")
+
+        weekly = self.store.weekly_context(datetime(2026, 7, 13, 1, 0, tzinfo=TZ))
+        self.assertFalse(weekly["has_diary_content"])
+        self.assertTrue(weekly["has_thought_content"])
+        self.assertEqual(weekly["diary_entries"], [])
+        self.assertEqual([item["entry_id"] for item in weekly["thought_entries"]], [draft["entry_id"]])
+        self.assertEqual(weekly["entries"], weekly["thought_entries"])
+
+    def test_user_input_type_can_be_corrected_before_confirmation_but_weekly_cannot(self):
+        text = "今天的实验让我想到分类可能不该是固定的。"
+        draft = self.store.create_draft(text)
+        first = self.store.save_preview(
+            draft["entry_id"], text, [{"text": text, "theme": "科研"}], entry_type="thought"
+        )
+        self.assertEqual(first["preview"]["entry_type"], "thought")
+        corrected = self.store.save_preview(
+            draft["entry_id"], text, [{"text": text, "theme": "科研"}], entry_type="diary"
+        )
+        self.assertEqual(corrected["preview"]["entry_type"], "diary")
+
+        decision_text = "是否采用新模型。"
+        decision = self.store.create_draft(decision_text)
+        decision_preview = self.store.save_preview(
+            decision["entry_id"],
+            decision_text,
+            [{"text": decision_text, "theme": "科研"}],
+            entry_type="decision",
+            decision=self.decision_payload(),
+        )
+        self.assertEqual(decision_preview["preview"]["entry_type"], "decision")
+        self.store.confirm(decision["entry_id"])
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT entry_type FROM entries WHERE id=?", (decision["entry_id"],)).fetchone()[0], "decision")
+            self.assertEqual(db.execute("SELECT count(*) FROM decisions WHERE entry_id=?", (decision["entry_id"],)).fetchone()[0], 1)
+
+        corrected_decision = self.store.create_draft("这其实只是一个模型想法。", entry_type="decision")
+        corrected_preview = self.store.save_preview(
+            corrected_decision["entry_id"],
+            "这其实只是一个模型想法。",
+            [{"text": "这其实只是一个模型想法。", "theme": "科研"}],
+            entry_type="thought",
+        )
+        self.assertEqual(corrected_preview["preview"]["entry_type"], "thought")
+
+        weekly = self.store.create_draft("周度总结", entry_type="weekly")
+        with self.assertRaisesRegex(ValueError, "weekly entry types"):
+            self.store.save_preview(
+                weekly["entry_id"],
+                "周度总结",
+                [{"text": "周度总结", "theme": "周度复盘"}],
+                entry_type="diary",
+            )
 
     def test_dynamic_retrieval_uses_budget_not_fixed_count(self):
         for index in range(15):
@@ -178,9 +263,12 @@ class DiaryStoreTests(unittest.TestCase):
         self.assertEqual(context["period_start"], "2026-07-06")
         self.assertEqual(context["period_end"], "2026-07-12")
         self.assertEqual(len(context["entries"]), 1)
+        self.assertEqual(len(context["diary_entries"]), 1)
+        self.assertEqual(context["thought_entries"], [])
 
     def test_decision_preview_confirm_archive_search_and_weekly_reminder(self):
         entry_id, result = self.confirm_decision("我正在考虑是否接受新的工作机会。", "2026-07-01")
+        self.assertEqual(result["preview"]["preview"]["entry_type"], "decision")
         self.assertEqual(result["preview"]["preview"]["decision"]["status"], "pending")
         with self.store.connect() as db:
             decision = db.execute("SELECT * FROM decisions WHERE entry_id=?", (entry_id,)).fetchone()

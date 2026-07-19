@@ -90,3 +90,13 @@
 - Revision: `2dfc218a-9b42-4073-bed1-16e0f7fcef7f`
 - Tests: Implemented structured pending/made decisions, preview/confirm persistence, theme tags, timeline-aware weekly reminders, explicit decision changes, CLI/docs, and migration. Validation: 23 pytest tests passed, py_compile passed, quick_validate passed, git diff --check passed, SQLite integrity_check ok, foreign_key_check empty.
 
+## 2026-07-18T23:59:02+08:00 approved
+
+- Revision: `1db04382-3176-4f97-bd87-801183ea687d`
+- Tests: User explicitly approved revision scope, Project_PA user_id=2 thought migration, and push of tracked diary data to origin/main.
+
+## 2026-07-19T09:26:50+08:00 applied
+
+- Revision: `1db04382-3176-4f97-bd87-801183ea687d`
+- Tests: py_compile passed; unittest 25 passed; pytest 25 passed and 6 subtests passed; skill quick_validate passed; git diff check passed; Project_PA migration confirmed 9 thoughts with verbatim originals, cleaned exports and FTS rows; migration preview hash, source hash and backup hash verified; SQLite integrity ok and foreign keys clean; diary, thought and decision whole-input classification covered.
+

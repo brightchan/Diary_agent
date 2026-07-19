@@ -2,7 +2,7 @@
 
 SQLite at `data/diary.sqlite3` is the structured source of truth.
 
-- `entries`: raw and cleaned text, status, type, date, preview payload.
+- `entries`: raw and cleaned text, status, whole-input type, date, preview payload. Each user input is exactly one `diary`, `thought`, or `decision`; subjects remain themes/tags. `weekly` is reserved for generated reviews.
 - `segments`: ordered text segments and their primary themes.
 - `segment_tags`: additive many-to-many segment theme/tag membership, including each primary theme for backward-compatible lookup.
 - `themes`: stable themes with `active`, `inactive`, or `merged` status and canonical merge pointers.
@@ -34,7 +34,7 @@ The main SQLite database and all journal Markdown files are intentionally Git-tr
 
 Theme changes never rewrite verbatim originals or confirmed cleaned Markdown. `reassign_segment` changes only the explicitly approved structured primary theme; `add_segment_tag` and `remove_segment_tag` change only explicit structured tag membership. SQLite remains authoritative when a historical Markdown theme snapshot differs after governance.
 
-`weekly-context` returns current-period entries, Active goals with separate `weekly_evidence` and non-authoritative `weekly_interpretations`, timeline-aware `pending_decisions` plus `decision_review` suggestions, and a bounded `historical_connections` set of older segments with dates, IDs, scores, and evidence reasons. It excludes the current weekly period and returns `reflection_prompt_candidate: null` when evidence is insufficient. Weekly interpretation records retain their source entry and never mutate goal state.
+`weekly-context` returns current-period `entries` for compatibility plus separate `diary_entries` and `thought_entries`, Active goals with separate `weekly_evidence` and non-authoritative `weekly_interpretations`, timeline-aware `pending_decisions` plus `decision_review` suggestions, and a bounded `historical_connections` set of older segments with dates, IDs, scores, and evidence reasons. It excludes the current weekly period and returns `reflection_prompt_candidate: null` when evidence is insufficient. Weekly interpretation records retain their source entry and never mutate goal state.
 
 Goal mirror:
 

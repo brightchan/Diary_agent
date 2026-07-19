@@ -1,12 +1,13 @@
 # Diary Agent
 
-Diary Agent is a local-first personal journal and life-context system designed to be used through Codex. It captures the user's exact words, prepares a conservative cleaned preview, organizes entries with themes and tags, connects related experiences, tracks confirmed goals, and produces weekly reviews. Confirmed data is stored locally in SQLite and readable Markdown.
+Diary Agent is a local-first journal, thought, decision, and life-context system designed to be used through Codex. It captures the user's exact words, classifies each complete recordable user input as a diary entry, thought, or decision, prepares a conservative cleaned preview, organizes entries with themes and tags, connects related records, tracks confirmed goals, and produces weekly reviews. Confirmed data is stored locally in SQLite and readable Markdown.
 
 The project uses Python's standard library and Codex's reasoning. It does not require an OpenAI API key, add an OpenAI API client, or make external model calls from the application.
 
 ## Choose the section you need
 
 - [For users: everyday use](#for-users-everyday-use) explains what to say to Codex.
+- [Diary entries, thoughts, and decisions](#record-a-thought) explains the whole-input distinction.
 - [Goals: life, long-term, short-term, and weekly](#goals-life-long-term-short-term-and-weekly) explains which goal types exist and how to add them.
 - [For AI agents: operating protocol](#for-ai-agents-operating-protocol) defines the safe workflow and commands.
 - [For maintainers: improving the system](#for-maintainers-improving-the-system) covers tests, backups, and Skill revisions.
@@ -40,19 +41,20 @@ You can say:
 
 > Record this in my diary: I had a difficult meeting today, but I handled the disagreement more calmly than before.
 
-You do not always need to say “record this.” A standalone statement about your own experience, feeling, reflection, decision, or life status enters the diary workflow by default.
+You do not always need to say “record this.” A standalone statement about your own experience, feeling, reflection, decision, life status, or an idea you want to preserve enters the capture workflow by default. Each complete recordable user input receives one previewed type: `diary`, `thought`, or `decision`.
 
 Direct questions, requests for information, and repository or coding commands are not captured as diary entries by default. If your wording could reasonably be either conversation or diary content, say explicitly whether you want it recorded.
 
 The capture flow is:
 
 1. Your exact text is saved immediately as a draft and preserved as the verbatim original.
-2. Codex cleans only speech artifacts, repetition, punctuation, and obvious sentence boundaries.
-3. Codex splits multiple ideas into ordered segments, gives each a primary theme, and may add cross-cutting tags.
-4. When the entry is locally relevant to an Active goal, Codex may add a clearly labeled AI goal interpretation with evidence and concise feedback.
-5. Codex may show uncertain terms, related older entries, and at most one optional reflection question.
-6. You correct or remove any interpretation, confirm, skip the question, defer it, or decline the entry.
-7. Only explicit confirmation creates the finalized cleaned journal and structured records.
+2. Codex classifies the complete input as `diary`, `thought`, or `decision`; this is one type for the whole input, not one type per segment. `weekly` is reserved for generated reviews.
+3. Codex cleans only speech artifacts, repetition, punctuation, and obvious sentence boundaries.
+4. Codex splits multiple ideas into ordered segments, gives each a primary theme, and may add cross-cutting tags.
+5. When the entry is locally relevant to an Active goal, Codex may add a clearly labeled AI goal interpretation with evidence and concise feedback.
+6. Codex shows the proposed type, cleaned text, themes, uncertain terms, related older entries, and at most one optional reflection question.
+7. You correct the type or any interpretation, confirm, skip the question, defer it, or decline the entry.
+8. Only explicit confirmation creates the finalized cleaned journal and structured records.
 
 Useful replies include:
 
@@ -63,6 +65,28 @@ Useful replies include:
 - `Do not save this entry.`
 
 Confirmed entries cannot be silently overwritten through the preview workflow. The original wording remains preserved even when the cleaned version or structured classification is corrected.
+
+### Record a thought
+
+Use a thought for an idea that should remain useful beyond the event that prompted it, for example:
+
+> Record this as a thought: cell fate may be easier to model as an attractor state than as a fixed label.
+
+> 记录一个想法：人的能力差异可能更多来自如何调用自己的认知能力，而不只是智商本身。
+
+The type applies to the user's entire input. One input is never split into records with different types. Ordered segments can still carry different themes and tags.
+
+| Type | Use it when the input is mainly about | Example |
+| --- | --- | --- |
+| `diary` | lived events, feelings, personal status, or a time-specific reflection | “今天开会后，我意识到自己总在回避冲突。” |
+| `thought` | a proposition, hypothesis, conceptual question, model, interpretation, or reusable insight | “冲突回避可能是一种对关系损失的风险估计。” |
+| `decision` | a meaningful pending or made choice between options | “我需要决定是否接受新的职位，下周复盘。” |
+
+For mixed input, Codex selects the dominant purpose of the complete message and shows the proposed type in the preview. You can reply `Change the type to thought`, `这条应该是日记`, or `把这条作为一个待决定事项` before confirmation. An explicit type in your request takes precedence. A decision preview additionally requires the structured analysis described below.
+
+Physics, biology, life, philosophy, and similar subjects are themes or tags, not entry types. For example, a record can have `type: thought`, primary theme `生物学`, and tags such as `细胞命运` and `复杂系统`.
+
+Direct questions and requests for information remain conversation unless you explicitly ask to preserve them. `weekly` remains a system-generated special record type rather than a user-input type.
 
 ### Track a decision
 
@@ -86,14 +110,24 @@ Ask natural questions such as:
 
 > Compare how I described this decision before and now.
 
+You can limit recall to one record type:
+
+> Search only my thoughts about intelligence and learning.
+
+```bash
+python3 -m diary_agent.cli --root . search --query 'intelligence and learning' --type thought
+python3 -m diary_agent.cli --root . search --query 'work meeting' --type diary
+```
+
 Search uses only confirmed local records. Codex should cite entry dates, separate evidence from inference, and stop retrieving when more context adds no useful information.
 
 ### Weekly journal review
 
 The weekly workflow summarizes the previous Monday through Sunday when confirmed entries exist. It can cover:
 
-- events and facts;
-- feelings, insights, themes, and tags;
+- diary events, facts, feelings, and time-specific reflections;
+- thoughts, hypotheses, conceptual changes, and questions worth developing;
+- themes and tags across both record types;
 - related patterns or changed views from older entries;
 - goal progress, blockers, and possible adjustments;
 - unfinished threads and practical next-week actions;
@@ -106,7 +140,7 @@ The intended schedule is Monday at 01:00 in `Asia/Singapore`. This repository do
 
 ### Organize themes and tags
 
-Each journal segment has one primary theme and may have several cross-cutting tags. You can ask Codex to:
+Each diary, thought, or decision segment has one primary theme and may have several cross-cutting tags. You can ask Codex to:
 
 - create, rename, activate, or deactivate a theme;
 - merge overlapping themes;
@@ -179,9 +213,9 @@ You can also ask to update, complete, pause, abandon, or reactivate a goal. Thos
 
 ### Record goal progress and blockers
 
-During ordinary diary capture, Codex automatically checks only locally relevant Active goals. When the current entry contains evidence, the normal diary preview may include an AI interpretation labeled `progress`, `blocker`, `reflection`, or `related`, plus concise feedback. You can correct or remove it before confirming the entry. Confirmed interpretations remain analytical annotations: they do not change goal status, create goal events, or become authoritative goal evidence.
+During diary, thought, or decision capture, Codex automatically checks only locally relevant Active goals. When the current entry contains evidence, the normal preview may include an AI interpretation labeled `progress`, `blocker`, `reflection`, or `related`, plus concise feedback. You can correct or remove it before confirming the entry. Confirmed interpretations remain analytical annotations: they do not change goal status, create goal events, or become authoritative goal evidence.
 
-To promote a confirmed diary entry into authoritative goal evidence, explicitly ask Codex to link it:
+To promote a confirmed entry into authoritative goal evidence, explicitly ask Codex to link it:
 
 > Link today's confirmed running entry to “Run three times this week” as progress. Evidence: completed the second run.
 
@@ -215,11 +249,11 @@ python3 .agents/skills/record-life-journal/scripts/journal.py --root . <command>
 
 It delegates to the deterministic CLI while making imports work from different current directories. Commands emit JSON on stdout and structured errors on stderr.
 
-### Decide whether a message is a diary capture
+### Decide whether a message is an ordinary capture
 
-Treat an unqualified declarative message about the user's personal experience, feeling, reflection, decision, or life status as diary capture. Do not capture direct questions, repository/task commands, content-generation requests, or clearly non-diary messages by default. When genuinely ambiguous, continue the conversation instead of silently capturing.
+Treat an unqualified declarative message about the user's personal experience, feeling, reflection, decision, life status, or an idea they clearly want to preserve as an ordinary capture. Do not capture direct questions, repository/task commands, content-generation requests, or clearly non-recording messages by default. When genuinely ambiguous, continue the conversation instead of silently capturing.
 
-This broad trigger does not remove the confirmation boundary. Never finalize a diary entry merely because capture was automatic.
+This broad trigger does not remove the confirmation boundary. Never finalize an entry merely because capture was automatic.
 
 ### Entry pipeline
 
@@ -232,7 +266,7 @@ python3 .agents/skills/record-life-journal/scripts/journal.py --root . \
 
 Use the returned `entry_id` throughout the turn. Use its routing decision, journal context, and bounded `goal_context` instead of scanning the entire journal tree or all goals. When `goal_context.has_context` is false, skip goal interpretation.
 
-Cleaning, classification, and continuity checks are always required. The deterministic cleaner is only a starting candidate:
+Whole-input `diary`/`thought`/`decision` classification, cleaning, theme classification, and continuity checks are always required. The initial draft type is not authoritative. Classify the complete input once, show the selected type in the preview, and never assign different entry types to its segments. The deterministic cleaner is only a starting candidate:
 
 ```bash
 python3 .agents/skills/record-life-journal/scripts/journal.py --root . \
@@ -248,15 +282,16 @@ Save the merged preview after presenting or correcting it:
 ```bash
 python3 .agents/skills/record-life-journal/scripts/journal.py --root . save-preview \
   --entry-id '<uuid>' \
+  --entry-type thought \
   --clean-text '<cleaned text>' \
   --segments '[{"text":"...","theme":"primary","tags":["cross-cutting"]}]' \
   --uncertainties '[]' --links '[]' --followups '[]' \
   --goal-interpretations '[{"goal_id":"...","relation":"progress","evidence":"...","interpretation":"...","feedback":"...","confidence":0.9}]'
 ```
 
-Segments stay in narrative order. Each requires a primary `theme`; `tags` are optional, deduplicated, and must not repeat the primary theme. Goal interpretations are optional, use only Active goals, require evidence from this entry, and can be corrected or removed by saving the preview again. Ordinary entries may have at most one optional follow-up question.
+`--entry-type` is required by the agent protocol for user-input previews and accepts `diary`, `thought`, or `decision`. It may correct any non-confirmed user-input draft, but it cannot convert a weekly review or a confirmed entry. Changing a preview to `decision` requires `--decision`; changing it away from `decision` must omit that payload. Segments stay in narrative order. Each requires a primary `theme`; `tags` are optional, deduplicated, and must not repeat the primary theme. Goal interpretations are optional, use only Active goals, require evidence from this entry, and can be corrected or removed by saving the preview again. User-input entries may have at most one optional follow-up question.
 
-For a decision draft, create it with `create-draft --type decision` and pass a JSON decision payload through `save-preview --decision`. The payload must include a do-nothing option and the full analysis structure described above. Missing analysis should be filled by Codex and shown for confirmation before saving.
+For an explicit or clearly recognizable decision draft, create it with `create-draft --type decision` and pass `--entry-type decision` plus a JSON decision payload through `save-preview --decision`. The payload must include a do-nothing option and the full analysis structure described above. Missing analysis should be filled by Codex and shown for confirmation before saving.
 
 Confirm only after the user explicitly approves the displayed version:
 
@@ -346,7 +381,7 @@ For the Monday 01:00 weekly journal:
 python3 -m diary_agent.cli --root . weekly-context
 ```
 
-Exit without semantic work when `has_content` is false. Otherwise use only the returned current entries, goals, historical connections, reflection candidate, and theme evidence. Each Active goal keeps explicit `weekly_evidence` separate from non-authoritative `weekly_interpretations`; summaries must preserve that distinction and must not silently promote interpretations. Create a weekly draft, show the review plus two to five optional questions, and require confirmation. Keep goal and theme mutations as separately confirmed proposals.
+Exit without semantic work when `has_content` is false. Otherwise use only the returned current entries, goals, historical connections, reflection candidate, and theme evidence. Summarize `diary_entries` as events, feelings, and time-specific reflection; summarize `thought_entries` as ideas, hypotheses, conceptual changes, and open questions. Keep the combined `entries` field only as a compatibility surface. Each Active goal keeps explicit `weekly_evidence` separate from non-authoritative `weekly_interpretations`; summaries must preserve that distinction and must not silently promote interpretations. Create a weekly draft, show the review plus two to five optional questions, and require confirmation. Keep goal and theme mutations as separately confirmed proposals.
 
 For the Monday 02:00 feedback review:
 
@@ -364,12 +399,12 @@ Exit when `has_feedback` is false. Otherwise follow `skill-improvement.md`; do n
 | `create-draft` | Store verbatim text and return routing, journal context, and locally relevant Active goals |
 | `route` | Inspect deterministic delegation signals without creating an entry |
 | `local-clean` | Produce a conservative cleaning candidate |
-| `save-preview` | Store cleaned text, segments, uncertainties, links, follow-ups, and optional AI goal interpretations |
+| `save-preview` | Store the whole-input diary/thought/decision type, cleaned text, segments, uncertainties, links, follow-ups, decision analysis, and optional AI goal interpretations |
 | `confirm` | Finalize a preview and export Markdown |
-| `search` | Retrieve relevant confirmed journal records |
+| `search` | Retrieve relevant confirmed records, optionally filtered by type |
 | `add-feedback` | Store workflow friction or a new requirement |
 | `update-followup` | Mark a follow-up answered, skipped, or deferred |
-| `weekly-context` | Build the previous week's evidence package |
+| `weekly-context` | Build the previous week's evidence package with separate diary and thought lists |
 | `theme-review-context` | Return theme states, usage, overlaps, and pending proposals |
 | `save-theme-review` | Store theme-change proposals |
 | `apply-theme-changes` | Apply explicit per-item theme decisions |
@@ -435,15 +470,30 @@ A change to the active diary Skill is more strictly governed than an ordinary co
 
 Do not use `git-snapshot` or `git-publish` casually: both stage the complete repository state, and `git-publish` also updates the remote branch.
 
+### Project_PA thought migration
+
+The historical thought migration reads `D:\Project_PA\data\project_pa.db` (`/mnt/d/Project_PA/data/project_pa.db` in WSL) without modifying it. Its source filter is:
+
+```sql
+user_id = 2
+AND lower(category) = 'thought'
+AND user_confirmed = 1
+AND content is nonempty
+```
+
+The completed source audit yielded nine real-user inputs. Two similarly labeled rows belonging to `user_id=1` / `testuser` were excluded. Each source row remains one complete `thought`; it was not split into records with different types or bulk-copied directly into SQLite. Source dates and verbatim content were preserved.
+
+Migration used the normal `create-draft` → `save-preview --entry-type thought` → explicit confirmation path. The approved preview SHA-256 was `951ce47e355590220ef9a45b9467a6a468b82ef1785da2e9b51a93eb66a16c86`. The provenance key is `project_pa:entries:<source_id>@<iso_timestamp>`, with content hashes used as a second duplicate check. The reviewed manifest and immutable human-readable preview live at `data/imports/project_pa_thoughts.json` and `data/imports/project_pa_thoughts_preview.md`. The pre-confirmation backup is `data/backups/diary-20260719-091941.sqlite3` with SHA-256 `6bbff2c9d06cb30fe38a3b75e6a31471778938a17d43f59242303e6de5dafee5`. All nine records were confirmed on 2026-07-19; final verification checks entries, Markdown files, FTS rows, source-key uniqueness, and SQLite integrity.
+
 ## Storage and repository map
 
 | Path | Role |
 | --- | --- |
-| `data/diary.sqlite3` | Authoritative structured diary, theme, goal, goal-interpretation, feedback, and revision data |
+| `data/diary.sqlite3` | Authoritative structured diary, thought, decision, theme, goal, goal-interpretation, feedback, and revision data |
 | `data/drafts/` | Temporary draft/preview state; removed after confirmation |
 | `data/backups/` | SQLite backups and SHA-256 manifests |
 | `journals/originals/YYYY/MM/` | Verbatim input, including draft/confirmed status |
-| `journals/cleaned/YYYY/MM/` | Confirmed cleaned diary Markdown |
+| `journals/cleaned/YYYY/MM/` | Confirmed cleaned diary, thought, and decision Markdown; frontmatter records the type |
 | `journals/weekly/YYYY/` | Confirmed weekly journal Markdown |
 | `memory/goals.md` | Generated readable goal mirror; SQLite remains authoritative |
 | `memory/workflow-feedback.md` | Readable workflow-feedback log |
@@ -459,6 +509,7 @@ The database uses SQLite WAL mode during normal work. WAL and SHM sidecars are d
 ## Safety invariants
 
 - Draft first, preview second, explicit confirmation last.
+- Each recordable user input is exactly one `diary`, `thought`, or `decision`; segments do not carry record types. `weekly` is generated separately.
 - Verbatim originals are never replaced by cleaned text.
 - Confirmed journals are not silently rewritten by theme or goal governance.
 - Goals are explicit user commitments, never inferred from older diary text.

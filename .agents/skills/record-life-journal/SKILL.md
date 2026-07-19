@@ -1,6 +1,6 @@
 ---
 name: record-life-journal
-description: Capture clear personal-life statements by default; clean, classify, tag, connect, review, confirm, search, and summarize diary entries and pending or made decisions; govern themes and confirmed life, multi-year long-term, within-one-year short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, decision capture and review, standalone personal experiences or reflections, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences, workflow feedback, or diary skill improvements.
+description: Capture and organize whole-input diary entries, reusable thoughts, and pending or made decisions; clean, classify, tag, connect, review, confirm, search, and summarize them; govern themes and confirmed life, multi-year long-term, within-one-year short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, recording scientific or philosophical ideas, standalone personal experiences or reflections, decision capture and review, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences or ideas, workflow feedback, or diary skill improvements.
 ---
 
 # Record Life Journal
@@ -9,9 +9,19 @@ Keep the user's wording and facts authoritative. Use Codex agents only; never re
 
 ## Default personal-life capture
 
-Treat an unqualified declarative message about the user's own experience, feeling, reflection, decision, or life status as a diary entry even when the user does not say “record this.” Do not default to diary capture for a direct question, repository or task command, request for information or content, or other clearly non-diary message. When the distinction is genuinely unclear, continue the conversation instead of silently capturing it.
+Treat an unqualified declarative message about the user's own experience, feeling, reflection, decision, or life status as an ordinary capture even when the user does not say “record this.” Do not default to capture for a direct question, repository or task command, request for information or content, or other clearly non-recording message. When the distinction is genuinely unclear, continue the conversation instead of silently capturing it.
 
 The broader trigger does not change the safety boundary: preserve the verbatim message in a draft first, show a preview, and require explicit confirmation before final storage.
+
+## Classify the whole input as diary, thought, or decision
+
+Assign exactly one user-input entry type to the user's complete input: `diary`, `thought`, or `decision`. Never split one input into records with different types, even when its ordered theme segments cover several subjects. Keep `weekly` for system-generated review output rather than ordinary user input.
+
+- Use `diary` when the input is primarily anchored to lived events, feelings, personal status, or time-specific reflection.
+- Use `thought` when the input is primarily intended to preserve a proposition, hypothesis, conceptual question, model, interpretation, or reusable insight. Thoughts may concern physics, biology, life, philosophy, or any other subject.
+- Use `decision` when the input preserves a meaningful pending or made choice between options. Route it through the structured decision analysis and lifecycle below.
+- Keep subject matter in the theme/tag layer; do not create entry types such as `physics` or `philosophy`.
+- Honor an explicit user choice of `diary`, `thought`, or `decision`. For mixed input without an explicit choice, select the dominant communicative purpose and show it in the preview so the user can correct it.
 
 ## Decision capture and review
 
@@ -39,14 +49,16 @@ Pending decisions may include a review date and/or due date. During weekly revie
 2. Treat the returned `entry_id` as the only identifier for the turn.
 3. Use the returned routing decision and retrieved context. Do not scan the full journal tree.
 4. Use the returned `cleaning_style` as a compact preservation guide. A style profile may prevent unnecessary edits; it never authorizes embellishment, normalization, or rewriting.
-5. Use the returned `goal_context` after cleaning and classification. When it contains relevant Active goals, prepare compact goal interpretations before merging the preview; when it is empty, skip that semantic stage.
+5. Classify the complete user input as `diary`, `thought`, or `decision`, then use the returned `goal_context`. When it contains relevant Active goals, prepare compact goal interpretations before merging the preview; when it is empty, skip that semantic stage.
 6. Read [agent-protocol.md](references/agent-protocol.md) before producing or merging an analysis payload.
 
-For a decision, use `create-draft --type decision`, and pass the structured decision analysis through `save-preview --decision`. The normal entry confirmation remains the only confirmation boundary for the initial decision record.
+For an explicit or clearly recognizable decision, use `create-draft --type decision`. Pass the structured decision analysis through `save-preview --entry-type decision --decision`. The normal entry confirmation remains the only confirmation boundary for the initial decision record.
+
+For every user-input capture, pass the selected whole-input type through `save-preview --entry-type diary|thought|decision`. The initial draft type is not authoritative; the previewed type is. A preview changed to `decision` must include the full decision payload; a preview changed away from `decision` must not include one.
 
 ## Route semantic work
 
-Always complete cleaning, classification, and continuity checks. Delegate only where local signals or your own uncertainty justify it.
+Always complete whole-input entry-type classification, cleaning, theme classification, and continuity checks. Delegate only where local signals or your own uncertainty justify it.
 
 - Delegate cleaning when speech artifacts, broken sentence boundaries, uncertain terms, or risky corrections exist.
 - Delegate classification when multiple themes, new themes, or overlapping historical themes require independent judgment.
@@ -76,18 +88,19 @@ python .agents/skills/record-life-journal/scripts/journal.py --root . local-clea
 
 ## Classify and connect
 
+- Classify the complete user input once as `diary`, `thought`, or `decision`; do not assign record types per segment.
 - Preserve one complete narrative and represent multiple ideas as ordered segments. Give each segment one primary `theme` and optional cross-cutting `tags`; deduplicate tags and omit the primary theme from `tags`.
 - Reuse an Active theme when evidence supports it. Exclude Inactive and Merged themes from new classification candidates; resolve a Merged name to its Active canonical target.
 - Mark a proposed new theme in the preview.
 - Never merge themes without explicit confirmation.
 - Link an older entry only when the relationship is supported by its text. Separate evidence from inference.
 - For each locally relevant Active goal, optionally classify current-entry evidence as `progress`, `blocker`, `reflection`, or `related`. Keep the evidence faithful to the current entry, label the result as AI interpretation, and never create, update, link, or change a goal from this stage.
-- Ask at most one ordinary-diary reflection question, only for a meaningful unfinished or continuing thread.
+- Ask at most one user-input reflection question, only for a meaningful unfinished or continuing thread.
 - Let the user answer, skip, or defer a question. A skipped question must not block confirmation.
 
 ## Preview before confirmation
 
-Show one concise preview containing cleaned full text, ordered theme segments, proposed new themes, uncertainties, relevant prior entries with reasons, AI goal interpretations when present, the full decision analysis when this is a decision, and at most one optional reflection question. Keep interpretations and decision analysis separate from the user's narrative. Make clear which decision fields are user-supplied facts, agent-labelled assumptions, and agent judgement.
+Show one concise preview containing the whole-input entry type, cleaned full text, ordered theme segments, proposed new themes, uncertainties, relevant prior entries with reasons, AI goal interpretations when present, the full decision analysis when this is a decision, and at most one optional reflection question. Keep interpretations and decision analysis separate from the user's narrative. Make clear which decision fields are user-supplied facts, agent-labelled assumptions, and agent judgement.
 
 After corrections or removal of any goal interpretation, call `save-preview` with schema-valid JSON. The normal entry preview is the only confirmation boundary; do not add a second per-goal confirmation step. Do not confirm in the same step unless the user explicitly confirms the displayed version.
 
@@ -101,7 +114,7 @@ Confirmation is idempotent. Report the stored original and cleaned Markdown path
 
 ## Search and recall
 
-Run `search --query '<question>'`. Retrieval has no fixed item-count limit; it stops by relevance, novelty, and token budget. Use returned records only, cite dates, and label inference.
+Run `search --query '<question>'`. Add `--type thought` or `--type diary` when the user asks for one record type. Retrieval has no fixed item-count limit; it stops by relevance, novelty, and token budget. Use returned records only, cite dates, and label inference.
 
 ## Weekly journal automation
 
@@ -111,7 +124,7 @@ At Monday 01:00 Asia/Singapore:
 2. Exit without an agent call when `has_content` is false. Pending decisions alone make `has_content` true so a scheduled decision reminder is not lost.
 3. When content exists, create a weekly draft covering the returned period.
 4. Use `historical_connections` when present to summarize evidence-backed patterns, changes, repeated blockers, and unfinished threads across weeks. Never imply a connection that the returned evidence does not support.
-5. Summarize facts, feelings/insights, theme and tag progress, goal progress and blockers, unfinished threads, and next-week actions. Treat `weekly_interpretations` as non-authoritative inferred evidence, keep it distinct from explicit `weekly_evidence`, and never promote it to a goal link or mutate a goal silently.
+5. Use `diary_entries` for events, feelings, personal reflections, goal progress, blockers, unfinished threads, and next-week actions. Use `thought_entries` for ideas, hypotheses, conceptual changes, and questions worth developing. Keep these sections distinct while allowing evidence-backed connections. Treat `weekly_interpretations` as non-authoritative inferred evidence, keep it distinct from explicit `weekly_evidence`, and never promote it to a goal link or mutate a goal silently.
 6. Ask an optional historical reflection question only when `reflection_prompt_candidate` is present and its cited historical segment supports the question.
 7. Include goal-adjustment drafts and theme-governance suggestions as separate review items. Never apply them through weekly-journal confirmation.
 8. Include `decision_review` suggestions for pending decisions. For overdue or upcoming items, fill missing analysis fields, recommend one option, and distinguish facts, assumptions, and judgement. Never mark a decision made through weekly-journal confirmation; use an explicit decision change proposal.
