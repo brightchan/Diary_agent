@@ -75,3 +75,8 @@
 - ID: `c5cdf7f0-7970-46c4-b04d-dcf2382dd420`
 - 更新 record-life-journal：当我输入一个想法后，先用100到200字给出你的看法，尽量同时包含支持与反驳，并拓展它的优点、局限及与其他密切观点、证据和我过往想法的联系。随后由我决定最终入库的是原想法、我指定的内容，还是你整理的双方观点；同时保留我要求直接入库或不入库的选择。
 
+## 2026-07-19T11:05:45+08:00 [workflow]
+
+- ID: `a5533aba-c804-4c33-accb-d0db291fd6aa`
+- 扩充尚未批准的 thought 对话提案：为 diary、thought、decision 都增加独立且可持久化的 Agent 反馈栏目，与用户原文和 clean_text 分开。diary 的 Agent 反馈被动触发；thought 和 decision 默认主动生成分析。decision 的短反馈主要结合过去相关的 confirmed decisions 和 thoughts 给出建议，尽量同时呈现支持理由和反方/风险，并控制在 200 字内。
+
