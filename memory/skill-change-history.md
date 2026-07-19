@@ -100,3 +100,8 @@
 - Revision: `1db04382-3176-4f97-bd87-801183ea687d`
 - Tests: py_compile passed; unittest 25 passed; pytest 25 passed and 6 subtests passed; skill quick_validate passed; git diff check passed; Project_PA migration confirmed 9 thoughts with verbatim originals, cleaned exports and FTS rows; migration preview hash, source hash and backup hash verified; SQLite integrity ok and foreign keys clean; diary, thought and decision whole-input classification covered.
 
+## 2026-07-19T11:00:47+08:00 failed
+
+- Revision: `0095644d-7f95-4a03-89eb-36e5705553f6`
+- Tests: Duplicate proposal attempt: sandbox blocked git index write before snapshot; superseded by proposed revision 6fa16682-936f-434d-8529-5eec6777237a.
+
