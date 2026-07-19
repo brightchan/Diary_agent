@@ -187,6 +187,15 @@ CREATE TABLE IF NOT EXISTS entry_goal_interpretations (
     UNIQUE(entry_id, goal_id, relation, evidence)
 );
 
+CREATE TABLE IF NOT EXISTS entry_agent_feedback (
+    entry_id TEXT PRIMARY KEY REFERENCES entries(id) ON DELETE CASCADE,
+    feedback_text TEXT NOT NULL,
+    trigger_mode TEXT NOT NULL CHECK(trigger_mode IN ('active','passive')),
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS goal_change_proposals (
     id TEXT PRIMARY KEY,
     action TEXT NOT NULL CHECK(action IN ('create','update','complete','pause','abandon','activate','link_entry')),
@@ -1002,6 +1011,7 @@ class DiaryStore:
             for candidate in candidates.values():
                 candidate["segments"] = self._entry_segment_records(db, str(candidate["id"]))
                 candidate["decision"] = self._decision_record(db, str(candidate["id"]))
+                candidate["agent_feedback"] = self._entry_agent_feedback(db, str(candidate["id"]))
 
         scored = []
         for row in candidates.values():
@@ -1041,6 +1051,7 @@ class DiaryStore:
                     "text": snippet,
                     "segments": row.get("segments", []),
                     "decision": row.get("decision"),
+                    "agent_feedback": row.get("agent_feedback"),
                 }
             )
             used += len(snippet)
@@ -1061,6 +1072,7 @@ class DiaryStore:
         goal_interpretations: list[dict[str, Any]] | None = None,
         decision: dict[str, Any] | None = None,
         entry_type: str | None = None,
+        agent_feedback: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         self.initialize()
         clean = clean_text.strip()
@@ -1111,6 +1123,19 @@ class DiaryStore:
                 clean,
                 goal_interpretations or [],
             )
+            normalized_agent_feedback = self._normalize_agent_feedback(
+                db,
+                str(current["id"]),
+                agent_feedback,
+            )
+            if selected_entry_type == "weekly" and normalized_agent_feedback is not None:
+                raise ValueError("weekly entries cannot include entry-level agent_feedback")
+            if (
+                selected_entry_type == "diary"
+                and normalized_agent_feedback is not None
+                and normalized_agent_feedback["trigger_mode"] != "passive"
+            ):
+                raise ValueError("diary agent_feedback must use passive trigger_mode")
             preview = {
                 "entry_type": selected_entry_type,
                 "clean_text": clean,
@@ -1119,6 +1144,7 @@ class DiaryStore:
                 "links": links or [],
                 "followups": followups or [],
                 "goal_interpretations": normalized_goal_interpretations,
+                "agent_feedback": normalized_agent_feedback,
             }
             if normalized_decision is not None:
                 preview["decision"] = normalized_decision
@@ -1153,6 +1179,20 @@ class DiaryStore:
                 preview.get("goal_interpretations") or [],
             )
             preview["goal_interpretations"] = goal_interpretations
+            agent_feedback = self._normalize_agent_feedback(
+                db,
+                str(row["id"]),
+                preview.get("agent_feedback"),
+            )
+            if row["entry_type"] == "weekly" and agent_feedback is not None:
+                raise ValueError("weekly entries cannot include entry-level agent_feedback")
+            if (
+                row["entry_type"] == "diary"
+                and agent_feedback is not None
+                and agent_feedback["trigger_mode"] != "passive"
+            ):
+                raise ValueError("diary agent_feedback must use passive trigger_mode")
+            preview["agent_feedback"] = agent_feedback
             db.execute("DELETE FROM segments WHERE entry_id=?", (entry_id,))
             theme_names = []
             stored_segments = []
@@ -1221,6 +1261,21 @@ class DiaryStore:
                         (str(uuid.uuid4()), entry_id, question, followup.get("status", "pending"), followup.get("revisit_after"), _iso(), _iso()),
                     )
             confirmed_at = _iso()
+            db.execute("DELETE FROM entry_agent_feedback WHERE entry_id=?", (entry_id,))
+            if agent_feedback is not None:
+                db.execute(
+                    """INSERT INTO entry_agent_feedback(
+                           entry_id,feedback_text,trigger_mode,evidence_json,created_at,updated_at
+                       ) VALUES(?,?,?,?,?,?)""",
+                    (
+                        entry_id,
+                        agent_feedback["feedback_text"],
+                        agent_feedback["trigger_mode"],
+                        _json(agent_feedback["evidence"]),
+                        confirmed_at,
+                        confirmed_at,
+                    ),
+                )
             decision_id = None
             if decision_payload is not None:
                 decision_id = str(uuid.uuid4())
@@ -1320,6 +1375,7 @@ class DiaryStore:
                         "clean_text": row["clean_text"],
                         "segments": self._entry_segment_records(db, str(row["id"])),
                         "decision": self._decision_record(db, str(row["id"])),
+                        "agent_feedback": self._entry_agent_feedback(db, str(row["id"])),
                     }
                 )
             goals = self._weekly_goal_context(db, start.isoformat(), end.isoformat())
@@ -1359,6 +1415,7 @@ class DiaryStore:
             record = self._decision_record(db, str(row["entry_id"]))
             if not record:
                 continue
+            record["agent_feedback"] = self._entry_agent_feedback(db, str(row["entry_id"]))
             trigger_candidates = [
                 (value, label)
                 for label, value in (("review_date", record.get("review_date")), ("due_date", record.get("due_date")))
@@ -1438,8 +1495,12 @@ class DiaryStore:
                 params.append(status)
             sql += " ORDER BY d.updated_at DESC"
             rows = db.execute(sql, params).fetchall()
-            records = [self._decision_record(db, str(row["entry_id"])) for row in rows]
-        records = [item for item in records if item]
+            records = []
+            for row in rows:
+                record = self._decision_record(db, str(row["entry_id"]))
+                if record:
+                    record["agent_feedback"] = self._entry_agent_feedback(db, str(row["entry_id"]))
+                    records.append(record)
         if query:
             vector = _ngrams(query)
             records = [
@@ -2049,6 +2110,67 @@ class DiaryStore:
             used += size
         return {"has_context": bool(selected), "query": text, "goals": selected}
 
+    def _normalize_agent_feedback(
+        self,
+        db: sqlite3.Connection,
+        entry_id: str,
+        payload: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if payload in (None, {}):
+            return None
+        if not isinstance(payload, dict):
+            raise ValueError("agent_feedback must be an object or null")
+        feedback_text = str(payload.get("feedback_text") or "").strip()
+        if not feedback_text:
+            raise ValueError("agent_feedback requires feedback_text")
+        if len(feedback_text) > 200:
+            raise ValueError("agent_feedback feedback_text must not exceed 200 characters")
+        trigger_mode = str(payload.get("trigger_mode") or "").strip().lower()
+        if trigger_mode not in {"active", "passive"}:
+            raise ValueError("agent_feedback trigger_mode must be active or passive")
+        raw_evidence = payload.get("evidence") or []
+        if not isinstance(raw_evidence, (list, tuple)):
+            raise ValueError("agent_feedback evidence must be a list")
+        evidence: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for item in raw_evidence:
+            if not isinstance(item, dict):
+                raise ValueError("each agent_feedback evidence item must be an object")
+            source_entry_id = str(item.get("entry_id") or "").strip()
+            if not source_entry_id:
+                raise ValueError("agent_feedback evidence requires entry_id")
+            if source_entry_id == entry_id:
+                raise ValueError("agent_feedback cannot cite the entry being previewed")
+            source = db.execute(
+                "SELECT id,entry_type,entry_date,status FROM entries WHERE id=?",
+                (source_entry_id,),
+            ).fetchone()
+            if not source or source["status"] != "confirmed":
+                raise ValueError("agent_feedback evidence must cite a confirmed entry")
+            reason = str(item.get("reason") or "").strip()
+            if not reason:
+                raise ValueError("agent_feedback evidence requires reason")
+            if len(reason) > 300:
+                raise ValueError("agent_feedback evidence reason must not exceed 300 characters")
+            key = (source_entry_id, reason)
+            if key in seen:
+                continue
+            seen.add(key)
+            evidence.append(
+                {
+                    "entry_id": source_entry_id,
+                    "date": str(source["entry_date"]),
+                    "type": str(source["entry_type"]),
+                    "reason": reason,
+                }
+            )
+        return {
+            "feedback_text": feedback_text,
+            "trigger_mode": trigger_mode,
+            "evidence": evidence,
+            "authoritative": False,
+        }
+
     def _validate_goal_interpretations(
         self,
         db: sqlite3.Connection,
@@ -2264,6 +2386,22 @@ class DiaryStore:
                 }
             )
         return records
+
+    def _entry_agent_feedback(self, db: sqlite3.Connection, entry_id: str) -> dict[str, Any] | None:
+        row = db.execute(
+            "SELECT feedback_text,trigger_mode,evidence_json,created_at,updated_at FROM entry_agent_feedback WHERE entry_id=?",
+            (entry_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "feedback_text": row["feedback_text"],
+            "trigger_mode": row["trigger_mode"],
+            "evidence": json.loads(row["evidence_json"] or "[]"),
+            "authoritative": False,
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
 
     def _refresh_entry_fts(self, db: sqlite3.Connection, entry_ids: Iterable[str]) -> None:
         for entry_id in set(entry_ids):
@@ -2726,6 +2864,26 @@ class DiaryStore:
             lines.extend([segment["text"], ""])
         if decision:
             lines.extend(self._decision_markdown_lines(decision))
+        if preview.get("agent_feedback"):
+            feedback = preview["agent_feedback"]
+            lines.extend(
+                [
+                    "## Agent feedback",
+                    "",
+                    "以下内容由 Agent 生成，是非权威分析，不属于用户原话、目标证据或决策事实。",
+                    "",
+                    feedback["feedback_text"],
+                    "",
+                    f"- Trigger: {feedback['trigger_mode']}",
+                ]
+            )
+            if feedback.get("evidence"):
+                lines.append("- Evidence:")
+                lines.extend(
+                    f"  - {item['date']} `{item['type']}` `{item['entry_id']}` — {item['reason']}"
+                    for item in feedback["evidence"]
+                )
+            lines.append("")
         if preview.get("goal_interpretations"):
             labels = {
                 "progress": "进展",

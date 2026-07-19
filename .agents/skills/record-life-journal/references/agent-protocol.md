@@ -69,6 +69,29 @@ Preserve narrative order. `theme` is required. `tags` is optional, deduplicated,
 
 User-input output may contain at most one follow-up. Weekly output may contain 2-5.
 
+## Agent-feedback output
+
+Keep Agent feedback separate from user-authored text and all authoritative facts:
+
+```json
+{
+  "agent_feedback": {
+    "feedback_text": "up to 200 Chinese characters including punctuation",
+    "trigger_mode": "active|passive",
+    "evidence": [
+      {"entry_id": "confirmed uuid", "date": "YYYY-MM-DD", "type": "diary|thought|decision|weekly", "reason": "why it is relevant"}
+    ],
+    "authoritative": false
+  }
+}
+```
+
+- Omit or pass `null` when no feedback should be stored. For `diary`, default to no feedback and generate it only on an explicit user request with `trigger_mode: passive`.
+- For `thought`, default to active feedback of 100-200 Chinese characters. When supported, cover both the strongest supporting case and a counterargument, then the idea's strengths, limits, applicability boundary, and closest evidence-backed connection. A missing counterargument or connection is a result, not a reason to invent one.
+- For `decision`, default to active feedback of at most 200 Chinese characters. Use bounded confirmed `decision` and `thought` retrieval, cite dates, present supporting reasons and risks, and give conditional advice. Do not replace or duplicate the full Decision output.
+- Evidence must refer to confirmed entries returned by local retrieval. Separate evidence from inference and never cite the current unconfirmed entry as its own evidence.
+- Never merge `agent_feedback` into `clean_text`, goal evidence, decision facts, or FTS user-text indexing. The user may correct or remove it in the normal preview.
+
 ## Goal-interpretation output
 
 Use only the locally filtered Active goals returned in `goal_context`. If it is empty, return no goal interpretations and skip semantic goal analysis.
@@ -131,10 +154,11 @@ python .agents/skills/record-life-journal/scripts/journal.py --root . save-previ
   --clean-text '<preview text>' \
   --segments '[{"text":"...","theme":"...","tags":["..."]}]' \
   --uncertainties '[]' --links '[]' --followups '[]' \
+  --agent-feedback '{"feedback_text":"...","trigger_mode":"active","evidence":[]}' \
   --goal-interpretations '[{"goal_id":"...","relation":"progress","evidence":"...","interpretation":"...","feedback":"...","confidence":0.9}]'
 ```
 
-Do not include chain-of-thought or full historical records.
+Do not include chain-of-thought or full historical records. `save-preview` normalizes Agent-feedback evidence dates and types from confirmed entries; confirmation persists the normalized value separately.
 
 ## Theme-governance output
 

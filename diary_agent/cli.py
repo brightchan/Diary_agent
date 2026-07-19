@@ -61,6 +61,10 @@ def parser() -> argparse.ArgumentParser:
         "--decision",
         help="JSON string or file with the structured decision analysis for a decision entry",
     )
+    preview.add_argument(
+        "--agent-feedback",
+        help="JSON string or file with optional non-authoritative Agent feedback",
+    )
 
     confirm = commands.add_parser("confirm")
     confirm.add_argument("--entry-id", required=True)
@@ -171,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                 load_json(args.goal_interpretations, []),
                 load_json(args.decision, None),
                 args.entry_type,
+                load_json(args.agent_feedback, None),
             )
         elif args.command == "confirm":
             result = store.confirm(args.entry_id)

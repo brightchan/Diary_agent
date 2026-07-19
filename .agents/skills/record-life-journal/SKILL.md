@@ -1,6 +1,6 @@
 ---
 name: record-life-journal
-description: Capture and organize whole-input diary entries, reusable thoughts, and pending or made decisions; clean, classify, tag, connect, review, confirm, search, and summarize them; govern themes and confirmed life, multi-year long-term, within-one-year short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, recording scientific or philosophical ideas, standalone personal experiences or reflections, decision capture and review, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences or ideas, workflow feedback, or diary skill improvements.
+description: Capture and organize whole-input diary entries, reusable thoughts, and pending or made decisions; clean, classify, tag, connect, provide separate bounded Agent feedback, review, confirm, search, and summarize them; govern themes and confirmed life, multi-year long-term, within-one-year short-term, or weekly goals with local SQLite and Markdown storage. Use for daily or weekly journaling, recording scientific or philosophical ideas, developing a thought through balanced feedback, standalone personal experiences or reflections, decision capture and review, spoken-text cleanup, life-theme classification, goal context, follow-up reflection, recalling prior experiences or ideas, workflow feedback, or diary skill improvements.
 ---
 
 # Record Life Journal
@@ -22,6 +22,17 @@ Assign exactly one user-input entry type to the user's complete input: `diary`, 
 - Use `decision` when the input preserves a meaningful pending or made choice between options. Route it through the structured decision analysis and lifecycle below.
 - Keep subject matter in the theme/tag layer; do not create entry types such as `physics` or `philosophy`.
 - Honor an explicit user choice of `diary`, `thought`, or `decision`. For mixed input without an explicit choice, select the dominant communicative purpose and show it in the preview so the user can correct it.
+
+## Develop and store Agent feedback separately
+
+Keep `agent_feedback` separate from the user's verbatim original, `clean_text`, segments, goal interpretations, and decision facts. Treat it as non-authoritative Agent analysis. Show it in the normal preview so the user can correct or remove it; store it only through the same explicit entry confirmation.
+
+- For `diary`, do not volunteer Agent feedback by default. Generate up to 200 Chinese characters only when the user explicitly asks for feedback; mark the trigger `passive`.
+- For `thought`, actively respond with 100-200 Chinese characters unless the user asks to skip feedback. When evidence supports it, include both a supportive case and a counterargument, then identify strengths, limits, applicability boundaries, and the closest related viewpoint, verifiable evidence, or confirmed prior thought. Do not invent opposition or evidence to fill the structure.
+- For `decision`, actively generate up to 200 Chinese characters unless the user asks to skip feedback. Retrieve only bounded, relevant confirmed `decision` and `thought` records; cite their dates, present reasons for and risks against the current direction, and give conditional advice. Keep this compact feedback distinct from the full structured decision analysis below. Never turn advice into a user fact or a `made` decision.
+- When no reliable counterargument, evidence, or historical connection exists, say that compactly instead of forcing one. Keep evidence and Agent inference visibly distinct.
+
+For thought development, create the original draft before responding, but do not rush final confirmation. The original thought is only the default candidate. The user may choose the original, specify different text, or ask to synthesize the user's and Agent's positions. Put a synthesis into `clean_text` only after the user selects it and sees a new preview; keep the separate Agent feedback column. `直接入库` or `不用讨论` skips synthesis but not preview and explicit confirmation. `不入库` prevents confirmation.
 
 ## Decision capture and review
 
@@ -49,8 +60,9 @@ Pending decisions may include a review date and/or due date. During weekly revie
 2. Treat the returned `entry_id` as the only identifier for the turn.
 3. Use the returned routing decision and retrieved context. Do not scan the full journal tree.
 4. Use the returned `cleaning_style` as a compact preservation guide. A style profile may prevent unnecessary edits; it never authorizes embellishment, normalization, or rewriting.
-5. Classify the complete user input as `diary`, `thought`, or `decision`, then use the returned `goal_context`. When it contains relevant Active goals, prepare compact goal interpretations before merging the preview; when it is empty, skip that semantic stage.
-6. Read [agent-protocol.md](references/agent-protocol.md) before producing or merging an analysis payload.
+5. Classify the complete user input as `diary`, `thought`, or `decision`, then prepare or omit Agent feedback using the trigger rules above and bounded confirmed evidence only.
+6. Use the returned `goal_context`. When it contains relevant Active goals, prepare compact goal interpretations before merging the preview; when it is empty, skip that semantic stage.
+7. Read [agent-protocol.md](references/agent-protocol.md) before producing or merging an analysis payload.
 
 For an explicit or clearly recognizable decision, use `create-draft --type decision`. Pass the structured decision analysis through `save-preview --entry-type decision --decision`. The normal entry confirmation remains the only confirmation boundary for the initial decision record.
 
@@ -100,7 +112,7 @@ python .agents/skills/record-life-journal/scripts/journal.py --root . local-clea
 
 ## Preview before confirmation
 
-Show one concise preview containing the whole-input entry type, cleaned full text, ordered theme segments, proposed new themes, uncertainties, relevant prior entries with reasons, AI goal interpretations when present, the full decision analysis when this is a decision, and at most one optional reflection question. Keep interpretations and decision analysis separate from the user's narrative. Make clear which decision fields are user-supplied facts, agent-labelled assumptions, and agent judgement.
+Show one concise preview containing the whole-input entry type, cleaned full text, ordered theme segments, proposed new themes, uncertainties, relevant prior entries with reasons, the separate Agent feedback when present, AI goal interpretations when present, the full decision analysis when this is a decision, and at most one optional reflection question. Keep Agent feedback, goal interpretations, and decision analysis separate from the user's narrative. Make clear which decision fields are user-supplied facts, agent-labelled assumptions, and Agent judgement.
 
 After corrections or removal of any goal interpretation, call `save-preview` with schema-valid JSON. The normal entry preview is the only confirmation boundary; do not add a second per-goal confirmation step. Do not confirm in the same step unless the user explicitly confirms the displayed version.
 
@@ -114,7 +126,7 @@ Confirmation is idempotent. Report the stored original and cleaned Markdown path
 
 ## Search and recall
 
-Run `search --query '<question>'`. Add `--type thought` or `--type diary` when the user asks for one record type. Retrieval has no fixed item-count limit; it stops by relevance, novelty, and token budget. Use returned records only, cite dates, and label inference.
+Run `search --query '<question>'`. Add `--type thought`, `--type diary`, or `--type decision` when the user asks for one record type or when preparing type-specific Agent feedback. Retrieval has no fixed item-count limit; it stops by relevance, novelty, and token budget. Use returned records only, cite dates, and label inference. Returned `agent_feedback` remains a separate non-authoritative field and must not be restated as the user's historical view.
 
 ## Weekly journal automation
 
@@ -124,7 +136,7 @@ At Monday 01:00 Asia/Singapore:
 2. Exit without an agent call when `has_content` is false. Pending decisions alone make `has_content` true so a scheduled decision reminder is not lost.
 3. When content exists, create a weekly draft covering the returned period.
 4. Use `historical_connections` when present to summarize evidence-backed patterns, changes, repeated blockers, and unfinished threads across weeks. Never imply a connection that the returned evidence does not support.
-5. Use `diary_entries` for events, feelings, personal reflections, goal progress, blockers, unfinished threads, and next-week actions. Use `thought_entries` for ideas, hypotheses, conceptual changes, and questions worth developing. Keep these sections distinct while allowing evidence-backed connections. Treat `weekly_interpretations` as non-authoritative inferred evidence, keep it distinct from explicit `weekly_evidence`, and never promote it to a goal link or mutate a goal silently.
+5. Use `diary_entries` for events, feelings, personal reflections, goal progress, blockers, unfinished threads, and next-week actions. Use `thought_entries` for ideas, hypotheses, conceptual changes, and questions worth developing. Keep these sections distinct while allowing evidence-backed connections. Treat each entry's `agent_feedback` and `weekly_interpretations` as separate non-authoritative analysis, distinct from user text and explicit `weekly_evidence`; never promote either to a goal link, decision fact, or user belief.
 6. Ask an optional historical reflection question only when `reflection_prompt_candidate` is present and its cited historical segment supports the question.
 7. Include goal-adjustment drafts and theme-governance suggestions as separate review items. Never apply them through weekly-journal confirmation.
 8. Include `decision_review` suggestions for pending decisions. For overdue or upcoming items, fill missing analysis fields, recommend one option, and distinguish facts, assumptions, and judgement. Never mark a decision made through weekly-journal confirmation; use an explicit decision change proposal.

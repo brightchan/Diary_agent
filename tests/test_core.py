@@ -778,6 +778,167 @@ class DiaryStoreTests(unittest.TestCase):
         self.assertEqual(weekly_interpretation["source_type"], "ai_goal_interpretation")
         self.assertFalse(weekly_interpretation["authoritative"])
 
+    def test_agent_feedback_preview_confirmation_retrieval_and_markdown(self):
+        prior = self.store.create_draft(
+            "过去我认为先做小实验比直接承诺更可靠。",
+            "thought",
+            entry_date="2026-07-17",
+        )
+        self.store.save_preview(
+            prior["entry_id"],
+            "过去我认为先做小实验比直接承诺更可靠。",
+            [{"text": "过去我认为先做小实验比直接承诺更可靠。", "theme": "决策方法"}],
+            entry_type="thought",
+        )
+        self.store.confirm(prior["entry_id"])
+
+        text = "我现在觉得复杂选择都应该先设计一个最小实验。"
+        draft = self.store.create_draft(text, "thought", entry_date="2026-07-18")
+        feedback_text = "这个方向能降低承诺成本，也符合你过去偏好小实验的思路；但并非所有选择都可逆，过度试验可能拖延必须及时承担的决定。反馈检索隔离词。"
+        feedback = {
+            "feedback_text": feedback_text,
+            "trigger_mode": "active",
+            "evidence": [{"entry_id": prior["entry_id"], "date": "wrong", "type": "diary", "reason": "同样强调最小实验。"}],
+        }
+        preview = self.store.save_preview(
+            draft["entry_id"],
+            text,
+            [{"text": text, "theme": "决策方法"}],
+            entry_type="thought",
+            agent_feedback=feedback,
+        )
+        normalized = preview["preview"]["agent_feedback"]
+        self.assertEqual(normalized["feedback_text"], feedback_text)
+        self.assertEqual(normalized["trigger_mode"], "active")
+        self.assertFalse(normalized["authoritative"])
+        self.assertEqual(normalized["evidence"][0]["date"], "2026-07-17")
+        self.assertEqual(normalized["evidence"][0]["type"], "thought")
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM entry_agent_feedback").fetchone()[0], 0)
+
+        result = self.store.confirm(draft["entry_id"])
+        markdown = Path(result["clean_path"]).read_text(encoding="utf-8")
+        self.assertIn("## Agent feedback", markdown)
+        self.assertIn("非权威分析", markdown)
+        self.assertIn(feedback_text, markdown)
+        self.assertNotIn(feedback_text, text)
+        with self.store.connect() as db:
+            stored = db.execute("SELECT * FROM entry_agent_feedback WHERE entry_id=?", (draft["entry_id"],)).fetchone()
+            entry = db.execute("SELECT raw_text,clean_text FROM entries WHERE id=?", (draft["entry_id"],)).fetchone()
+            fts_hits = db.execute(
+                "SELECT count(*) FROM entries_fts WHERE entries_fts MATCH ?",
+                ('"反馈检索隔离词"',),
+            ).fetchone()[0]
+        self.assertEqual(stored["feedback_text"], feedback_text)
+        self.assertEqual(stored["trigger_mode"], "active")
+        self.assertEqual(json.loads(stored["evidence_json"])[0]["entry_id"], prior["entry_id"])
+        self.assertEqual(tuple(entry), (text, text))
+        self.assertEqual(fts_hits, 0)
+
+        weekly = self.store.weekly_context(datetime(2026, 7, 20, 1, 0, tzinfo=TZ))
+        weekly_entry = next(item for item in weekly["thought_entries"] if item["entry_id"] == draft["entry_id"])
+        self.assertEqual(weekly_entry["agent_feedback"]["feedback_text"], feedback_text)
+        recalled = next(item for item in self.store.search("最小实验", entry_type="thought") if item["entry_id"] == draft["entry_id"])
+        self.assertEqual(recalled["agent_feedback"]["feedback_text"], feedback_text)
+
+    def test_agent_feedback_validation_removal_and_skill_trigger_contract(self):
+        draft = self.store.create_draft("今天只是记录一次普通散步。", entry_date="2026-07-18")
+        segments = [{"text": "今天只是记录一次普通散步。", "theme": "生活"}]
+        with self.assertRaises(ValueError):
+            self.store.save_preview(
+                draft["entry_id"],
+                "今天只是记录一次普通散步。",
+                segments,
+                agent_feedback={"feedback_text": "字" * 201, "trigger_mode": "passive", "evidence": []},
+            )
+        with self.assertRaises(ValueError):
+            self.store.save_preview(
+                draft["entry_id"],
+                "今天只是记录一次普通散步。",
+                segments,
+                agent_feedback={"feedback_text": "简短反馈", "trigger_mode": "automatic", "evidence": []},
+            )
+        with self.assertRaises(ValueError):
+            self.store.save_preview(
+                draft["entry_id"],
+                "今天只是记录一次普通散步。",
+                segments,
+                agent_feedback={"feedback_text": "日记反馈必须被动触发。", "trigger_mode": "active", "evidence": []},
+            )
+        unconfirmed = self.store.create_draft("尚未确认的证据", "thought", entry_date="2026-07-17")
+        with self.assertRaises(ValueError):
+            self.store.save_preview(
+                draft["entry_id"],
+                "今天只是记录一次普通散步。",
+                segments,
+                agent_feedback={
+                    "feedback_text": "简短反馈",
+                    "trigger_mode": "passive",
+                    "evidence": [{"entry_id": unconfirmed["entry_id"], "reason": "尚未确认"}],
+                },
+            )
+        first = self.store.save_preview(
+            draft["entry_id"],
+            "今天只是记录一次普通散步。",
+            segments,
+            agent_feedback={"feedback_text": "按你的要求提供反馈。", "trigger_mode": "passive", "evidence": []},
+        )
+        self.assertIsNotNone(first["preview"]["agent_feedback"])
+        removed = self.store.save_preview(
+            draft["entry_id"],
+            "今天只是记录一次普通散步。",
+            segments,
+            agent_feedback=None,
+        )
+        self.assertIsNone(removed["preview"]["agent_feedback"])
+        result = self.store.confirm(draft["entry_id"])
+        self.assertNotIn("## Agent feedback", Path(result["clean_path"]).read_text(encoding="utf-8"))
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM entry_agent_feedback").fetchone()[0], 0)
+
+        project = Path(__file__).parents[1]
+        skill = (project / ".agents" / "skills" / "record-life-journal" / "SKILL.md").read_text(encoding="utf-8")
+        protocol = (project / ".agents" / "skills" / "record-life-journal" / "references" / "agent-protocol.md").read_text(encoding="utf-8")
+        self.assertIn("For `diary`, do not volunteer Agent feedback by default", skill)
+        self.assertIn("For `thought`, actively respond with 100-200 Chinese characters", skill)
+        self.assertIn("For `decision`, actively generate up to 200 Chinese characters", skill)
+        self.assertIn("Never merge `agent_feedback` into `clean_text`", protocol)
+
+    def test_agent_feedback_cli_preview(self):
+        text = "通过 CLI 保存一条带独立反馈的想法。"
+        draft = self.store.create_draft(text, "thought", entry_date="2026-07-18")
+        project = Path(__file__).parents[1]
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "diary_agent.cli",
+                "--root",
+                str(self.root),
+                "save-preview",
+                "--entry-id",
+                draft["entry_id"],
+                "--entry-type",
+                "thought",
+                "--clean-text",
+                text,
+                "--segments",
+                json.dumps([{"text": text, "theme": "系统"}], ensure_ascii=False),
+                "--agent-feedback",
+                json.dumps(
+                    {"feedback_text": "这条反馈由 CLI 参数独立保存。", "trigger_mode": "active", "evidence": []},
+                    ensure_ascii=False,
+                ),
+            ],
+            cwd=project,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["preview"]["agent_feedback"]["trigger_mode"], "active")
+
     def test_initialize_migration_is_idempotent_and_preserves_journals(self):
         entry_id = self.confirm_entry("迁移不能改写日记。", "2026-06-01", "系统")
         original = next((self.root / "journals" / "originals").rglob(f"*{entry_id}.md"))
@@ -796,7 +957,7 @@ class DiaryStoreTests(unittest.TestCase):
                    WHERE s.entry_id=? AND st.theme_id=s.theme_id""",
                 (entry_id,),
             ).fetchone()[0]
-        self.assertTrue({"theme_change_proposals", "segment_tags", "goals", "goal_events", "goal_entry_links", "entry_goal_interpretations", "goal_change_proposals", "cleaning_style_profiles", "decisions", "decision_change_proposals"}.issubset(tables))
+        self.assertTrue({"theme_change_proposals", "segment_tags", "goals", "goal_events", "goal_entry_links", "entry_goal_interpretations", "entry_agent_feedback", "goal_change_proposals", "cleaning_style_profiles", "decisions", "decision_change_proposals"}.issubset(tables))
         self.assertEqual(backfilled, 1)
 
     def test_default_personal_capture_guidance_and_no_external_semantic_dependency(self):

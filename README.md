@@ -1,6 +1,6 @@
 # Diary Agent
 
-Diary Agent is a local-first journal, thought, decision, and life-context system designed to be used through Codex. It captures the user's exact words, classifies each complete recordable user input as a diary entry, thought, or decision, prepares a conservative cleaned preview, organizes entries with themes and tags, connects related records, tracks confirmed goals, and produces weekly reviews. Confirmed data is stored locally in SQLite and readable Markdown.
+Diary Agent is a local-first journal, thought, decision, and life-context system designed to be used through Codex. It captures the user's exact words, classifies each complete recordable user input as a diary entry, thought, or decision, prepares a conservative cleaned preview, stores optional Agent feedback separately from the user's voice, organizes entries with themes and tags, connects related records, tracks confirmed goals, and produces weekly reviews. Confirmed data is stored locally in SQLite and readable Markdown.
 
 The project uses Python's standard library and Codex's reasoning. It does not require an OpenAI API key, add an OpenAI API client, or make external model calls from the application.
 
@@ -8,6 +8,7 @@ The project uses Python's standard library and Codex's reasoning. It does not re
 
 - [For users: everyday use](#for-users-everyday-use) explains what to say to Codex.
 - [Diary entries, thoughts, and decisions](#record-a-thought) explains the whole-input distinction.
+- [Agent feedback](#keep-agent-feedback-with-an-entry) explains active thought/decision feedback and passive diary feedback.
 - [Goals: life, long-term, short-term, and weekly](#goals-life-long-term-short-term-and-weekly) explains which goal types exist and how to add them.
 - [For AI agents: operating protocol](#for-ai-agents-operating-protocol) defines the safe workflow and commands.
 - [For maintainers: improving the system](#for-maintainers-improving-the-system) covers tests, backups, and Skill revisions.
@@ -51,10 +52,11 @@ The capture flow is:
 2. Codex classifies the complete input as `diary`, `thought`, or `decision`; this is one type for the whole input, not one type per segment. `weekly` is reserved for generated reviews.
 3. Codex cleans only speech artifacts, repetition, punctuation, and obvious sentence boundaries.
 4. Codex splits multiple ideas into ordered segments, gives each a primary theme, and may add cross-cutting tags.
-5. When the entry is locally relevant to an Active goal, Codex may add a clearly labeled AI goal interpretation with evidence and concise feedback.
-6. Codex shows the proposed type, cleaned text, themes, uncertain terms, related older entries, and at most one optional reflection question.
-7. You correct the type or any interpretation, confirm, skip the question, defer it, or decline the entry.
-8. Only explicit confirmation creates the finalized cleaned journal and structured records.
+5. Codex may prepare a separate Agent feedback column: diary feedback is only produced when you ask; thought and decision feedback is active by default unless you skip it.
+6. When the entry is locally relevant to an Active goal, Codex may add a clearly labeled AI goal interpretation with evidence and concise feedback.
+7. Codex shows the proposed type, cleaned text, themes, Agent feedback, uncertain terms, related older entries, and at most one optional reflection question.
+8. You correct the type or any interpretation, confirm, skip the question, defer it, or decline the entry.
+9. Only explicit confirmation creates the finalized cleaned journal and structured records.
 
 Useful replies include:
 
@@ -88,13 +90,23 @@ Physics, biology, life, philosophy, and similar subjects are themes or tags, not
 
 Direct questions and requests for information remain conversation unless you explicitly ask to preserve them. `weekly` remains a system-generated special record type rather than a user-input type.
 
+### Keep Agent feedback with an entry
+
+Agent feedback is stored in its own field and Markdown section. It never becomes part of your verbatim original, cleaned wording, goal evidence, or decision facts.
+
+- For a `diary`, Codex does not volunteer advice. Ask `给这条日记一点反馈` to add passive feedback of at most 200 Chinese characters.
+- For a `thought`, Codex normally gives 100-200 Chinese characters of active feedback. When evidence supports it, the response includes both support and counterargument, strengths and limits, applicability boundaries, and a close connection to evidence or a confirmed prior thought.
+- For a `decision`, Codex normally gives active feedback of at most 200 Chinese characters based primarily on related confirmed decisions and thoughts. It presents reasons for and risks against the direction and gives conditional advice without replacing the full decision analysis.
+
+After discussing a thought, you can preserve the original, specify different wording, ask Codex to synthesize both sides, or decline storage. A synthesis becomes your stored thought only after you choose it and approve the new preview. `直接入库` skips synthesis but still requires preview confirmation; `不入库` prevents confirmation. You can also say `不要 Agent 反馈` for any entry.
+
 ### Track a decision
 
 Say explicitly that you want a choice tracked as a decision, for example:
 
 > Track this as a pending decision: whether I should accept the new role. Revisit it next week.
 
-Decision entries use the same themes and tags as diary entries, but also keep a structured analysis. The preview includes the actual objective, options including doing nothing, reversible and irreversible consequences, opportunity cost, likely regret in one or five years, assumptions that could be wrong, the smallest experiment that would reduce uncertainty, and one recommendation. Facts, assumptions, and the agent's judgement are shown separately.
+Decision entries use the same themes and tags as diary entries, but also keep a structured analysis. The preview includes the actual objective, options including doing nothing, reversible and irreversible consequences, opportunity cost, likely regret in one or five years, assumptions that could be wrong, the smallest experiment that would reduce uncertainty, and one recommendation. Facts, assumptions, and the agent's judgement are shown separately. The separate Agent-feedback field is the short, history-aware response; it does not replace this full analysis.
 
 If you provide only the choice or objective, Codex fills the missing analysis from your wording and bounded local context, labels those additions as agent analysis, and asks you to confirm the completed preview. A pending decision stays open for future consideration; a made decision is archived for future reference. You can later ask to update, make, or reopen a decision, but those changes are explicit proposals and never rewrite the original wording.
 
@@ -120,6 +132,7 @@ python3 -m diary_agent.cli --root . search --query 'work meeting' --type diary
 ```
 
 Search uses only confirmed local records. Codex should cite entry dates, separate evidence from inference, and stop retrieving when more context adds no useful information.
+Returned Agent feedback is labeled separately and is not used as evidence of what you previously believed. Default FTS matching continues to index your cleaned text and themes, not Agent feedback.
 
 ### Weekly journal review
 
@@ -286,10 +299,11 @@ python3 .agents/skills/record-life-journal/scripts/journal.py --root . save-prev
   --clean-text '<cleaned text>' \
   --segments '[{"text":"...","theme":"primary","tags":["cross-cutting"]}]' \
   --uncertainties '[]' --links '[]' --followups '[]' \
+  --agent-feedback '{"feedback_text":"...","trigger_mode":"active","evidence":[]}' \
   --goal-interpretations '[{"goal_id":"...","relation":"progress","evidence":"...","interpretation":"...","feedback":"...","confidence":0.9}]'
 ```
 
-`--entry-type` is required by the agent protocol for user-input previews and accepts `diary`, `thought`, or `decision`. It may correct any non-confirmed user-input draft, but it cannot convert a weekly review or a confirmed entry. Changing a preview to `decision` requires `--decision`; changing it away from `decision` must omit that payload. Segments stay in narrative order. Each requires a primary `theme`; `tags` are optional, deduplicated, and must not repeat the primary theme. Goal interpretations are optional, use only Active goals, require evidence from this entry, and can be corrected or removed by saving the preview again. User-input entries may have at most one optional follow-up question.
+`--entry-type` is required by the agent protocol for user-input previews and accepts `diary`, `thought`, or `decision`. It may correct any non-confirmed user-input draft, but it cannot convert a weekly review or a confirmed entry. Changing a preview to `decision` requires `--decision`; changing it away from `decision` must omit that payload. Segments stay in narrative order. Each requires a primary `theme`; `tags` are optional, deduplicated, and must not repeat the primary theme. `--agent-feedback` is optional, limited to 200 characters, and may cite only confirmed entries; pass no payload to remove it before confirmation. Goal interpretations are optional, use only Active goals, require evidence from this entry, and can be corrected or removed by saving the preview again. User-input entries may have at most one optional follow-up question.
 
 For an explicit or clearly recognizable decision draft, create it with `create-draft --type decision` and pass `--entry-type decision` plus a JSON decision payload through `save-preview --decision`. The payload must include a do-nothing option and the full analysis structure described above. Missing analysis should be filled by Codex and shown for confirmation before saving.
 
@@ -399,7 +413,7 @@ Exit when `has_feedback` is false. Otherwise follow `skill-improvement.md`; do n
 | `create-draft` | Store verbatim text and return routing, journal context, and locally relevant Active goals |
 | `route` | Inspect deterministic delegation signals without creating an entry |
 | `local-clean` | Produce a conservative cleaning candidate |
-| `save-preview` | Store the whole-input diary/thought/decision type, cleaned text, segments, uncertainties, links, follow-ups, decision analysis, and optional AI goal interpretations |
+| `save-preview` | Store the whole-input diary/thought/decision type, cleaned text, segments, uncertainties, links, follow-ups, optional Agent feedback, decision analysis, and optional AI goal interpretations |
 | `confirm` | Finalize a preview and export Markdown |
 | `search` | Retrieve relevant confirmed records, optionally filtered by type |
 | `add-feedback` | Store workflow friction or a new requirement |
@@ -489,11 +503,11 @@ Migration used the normal `create-draft` → `save-preview --entry-type thought`
 
 | Path | Role |
 | --- | --- |
-| `data/diary.sqlite3` | Authoritative structured diary, thought, decision, theme, goal, goal-interpretation, feedback, and revision data |
+| `data/diary.sqlite3` | Authoritative structured diary, thought, decision, separate Agent-feedback, theme, goal, goal-interpretation, workflow-feedback, and revision data |
 | `data/drafts/` | Temporary draft/preview state; removed after confirmation |
 | `data/backups/` | SQLite backups and SHA-256 manifests |
 | `journals/originals/YYYY/MM/` | Verbatim input, including draft/confirmed status |
-| `journals/cleaned/YYYY/MM/` | Confirmed cleaned diary, thought, and decision Markdown; frontmatter records the type |
+| `journals/cleaned/YYYY/MM/` | Confirmed cleaned diary, thought, and decision Markdown; frontmatter records the type and Agent feedback appears only in its own section |
 | `journals/weekly/YYYY/` | Confirmed weekly journal Markdown |
 | `memory/goals.md` | Generated readable goal mirror; SQLite remains authoritative |
 | `memory/workflow-feedback.md` | Readable workflow-feedback log |
@@ -510,6 +524,7 @@ The database uses SQLite WAL mode during normal work. WAL and SHM sidecars are d
 
 - Draft first, preview second, explicit confirmation last.
 - Each recordable user input is exactly one `diary`, `thought`, or `decision`; segments do not carry record types. `weekly` is generated separately.
+- Agent feedback stays non-authoritative and separate from verbatim text, cleaned text, goals, decision facts, and default FTS indexing.
 - Verbatim originals are never replaced by cleaned text.
 - Confirmed journals are not silently rewritten by theme or goal governance.
 - Goals are explicit user commitments, never inferred from older diary text.
