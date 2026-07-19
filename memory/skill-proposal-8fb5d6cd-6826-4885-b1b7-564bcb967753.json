@@ -1,0 +1,21 @@
+{
+  "feedback_ids": [
+    "c5cdf7f0-7970-46c4-b04d-dcf2382dd420",
+    "a5533aba-c804-4c33-accb-d0db291fd6aa"
+  ],
+  "problem_summary": "当前 Skill 没有一个统一、独立、可确认并可持久化的 Agent 反馈栏目。上一版提案只规定 thought 输入后的临时分析，尚未覆盖 diary 和 decision，也未把 Agent 的反馈与用户原文、clean_text、完整 decision analysis 分层保存。",
+  "impact": "如果只在对话中显示反馈，后续回顾看不到 Agent 当时的判断；如果把反馈混入 clean_text，又会混淆用户观点与 Agent 推断。decision 还会错过结合用户既往 decisions 和 thoughts 提供短而平衡建议的机会，diary 则可能收到不必要的主动建议。",
+  "proposed_diff": "1. 为所有用户输入类型增加可选的结构化 `agent_feedback`：正文、触发方式 `active|passive`、以及有界证据引用列表。它必须与 raw_text、clean_text、segments、goal interpretations 和 decision analysis 分离，在普通预览中单独显示并允许用户修改或删除。\n2. 触发矩阵：diary 默认不生成，只有用户明确要求反馈时才被动生成；thought 默认主动生成 100-200 个中文字符（含标点）的反馈；decision 默认主动生成不超过 200 个中文字符（含标点）的反馈。用户可对任一类型明确要求跳过 Agent 反馈。\n3. thought 反馈沿用上一版要求：在有依据且有意义时兼顾支持与反驳，指出优点、局限和适用边界，连接最密切的观点、可核实证据及已确认的过往 thoughts；没有可靠反方、证据或历史联系时明确说不足，不为凑结构而编造。\n4. decision 的短反馈不替代现有完整结构化 decision analysis。它优先通过有界本地检索使用与当前选择最相关的已确认 decisions 和 thoughts，分别说明支持当前方向的理由与反方/风险，给出带条件的建议，并引用记录日期；没有相关历史证据时明确标注。不得把 Agent 建议写成用户事实，也不得自动把 pending decision 标为 made。\n5. 保留 thought 讨论后的入库选择：原想法默认只作为待确认候选；用户可改为保存明确指定内容或让 Agent 整理双方观点。综合稿进入用户内容前必须由用户选择并预览；Agent 反馈仍保存于独立栏目。用户说“直接入库/不用讨论”只跳过综合讨论，仍走现有预览确认；用户说“不入库”则不得确认。\n6. 扩展 `save-preview` 与 CLI，增加可选 `--agent-feedback` JSON。预览阶段保存在 preview JSON；确认时写入新增的规范化 `entry_agent_feedback` 表，并在 cleaned Markdown 添加独立 `## Agent feedback` 章节。表以 entry_id 唯一关联，保存 feedback_text、trigger_mode、evidence_json 和审计时间；旧记录保持无反馈。实现幂等 SQLite migration。\n7. 搜索和 weekly context 如返回 Agent 反馈，必须作为单独字段并保持非权威标签；默认 FTS 与用户观点检索只索引用户 clean_text/主题，不把 Agent 反馈混入用户历史观点或 goal/decision 事实。\n8. 更新 SKILL.md、references/agent-protocol.md、references/storage-schema.md、README.md、core.py、cli.py 与 tests。Agent 协议规定反馈正文上限、证据格式、触发矩阵、事实/推断分离和无可靠证据时的停止规则。",
+  "compatibility": "保留 draft -> preview -> explicit confirm、安全原文、whole-input diary|thought|decision 分类和现有完整 decision analysis。新增表和 CLI 参数均为可选、幂等、向后兼容；旧记录与旧 Markdown 不重写。Agent 反馈是非权威分析，不成为用户原话、goal evidence、decision fact，也不触发任何状态变更。上一版 revision 6fa16682 将被标记为 superseded/rejected，仅由本提案继续等待批准。",
+  "tests": [
+    "迁移测试：现有数据库幂等新增 entry_agent_feedback，旧 entries 保持原值，PRAGMA integrity_check 与 foreign_key_check 通过",
+    "save-preview/CLI 测试：可选 agent_feedback 结构、active|passive 枚举、空值和 200 字上限验证正确，旧调用继续工作",
+    "触发场景测试：diary 默认无反馈且显式请求后可加入；thought 默认产生 100-200 字双向反馈；decision 默认产生不超过 200 字的历史关联建议；显式跳过时均可移除",
+    "证据边界测试：decision/thought 只引用已确认且有关系的历史记录，包含日期；无证据时不伪造；Agent 推断不进入 user clean_text、goal evidence 或 decision facts",
+    "确认与导出测试：确认后规范化表和 Markdown 独立 Agent feedback 章节一致；用户原文与 cleaned text 不含隐式 Agent 内容",
+    "检索与周报测试：agent_feedback 可作为单独字段读取，但不进入默认 FTS 用户观点匹配或权威证据",
+    "运行 python3 -m py_compile、完整 pytest、skill-creator quick_validate.py、git diff --check 以及 SQLite 完整性检查",
+    "手工前向场景：thought 讨论后选择原文/指定内容/双方综合稿/不入库；decision 显示历史依据的双向短建议；diary 不主动说教"
+  ],
+  "token_cost_change": "increase with reason: thought 与 decision 默认各增加最多 200 个中文字符的 Agent 反馈，并为 decision/thought 使用一次有界本地检索；diary 默认不主动生成。检索按相关性和新增信息停止，且不扫描完整日记树。"
+}
