@@ -56,6 +56,9 @@ SQLite is the source of truth. This file is regenerated only after confirmed goa
 - [active] **小孩开始机器人自主项目** (priority 0; parent `20752ddb-49a6-4ac3-ba5e-49fad2b75af5`)
   - 小孩机器人要开始自主项目。
   - Success: 小孩开始一个机器人自主项目。
+- [active] **建立被动交易品种关系与组合回测研究系统** (priority 0; target 2026-08-19)
+  - 研究不同投资品种之间的关系，以及不同组合搭配的结果，为后续建立更主动的交易系统提供可验证基础。
+  - Success: 研究与回测系统可以运行。
 
 ## Weekly
 
@@ -63,6 +66,7 @@ SQLite is the source of truth. This file is regenerated only after confirmed goa
 
 ## Recent confirmed changes
 
+- 2026-07-19T16:39:49+08:00: 建立被动交易品种关系与组合回测研究系统 — created
 - 2026-07-14T17:39:44+08:00: 小孩学会游泳 — updated
 - 2026-07-14T17:39:44+08:00: 建立新版交易系统研究框架 — updated
 - 2026-07-14T17:39:44+08:00: 完成SpliceAI2论文发表 — updated
@@ -74,4 +78,3 @@ SQLite is the source of truth. This file is regenerated only after confirmed goa
 - 2026-07-14T17:38:56+08:00: 完成SpliceAI2论文发表 — created
 - 2026-07-14T17:38:56+08:00: 小孩开始机器人自主项目 — created
 - 2026-07-14T17:38:56+08:00: 小孩钢琴过级 — created
-- 2026-07-14T17:38:56+08:00: 审阅和制定ISOOR标准 — created
