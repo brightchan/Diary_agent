@@ -1,0 +1,26 @@
+[
+  {
+    "text": "这周的主要任务目标是把组会的PPT准备好,然后两个学生要进来的一些工作要做好准备,确保顺利。",
+    "theme": "学生指导",
+    "tags": ["组会", "PPT"],
+    "theme_status": "existing"
+  },
+  {
+    "text": "其次就是个人的这个Wiki要建立好,而且要能开始产生小的review。",
+    "theme": "AI工具与工作流",
+    "tags": ["个人知识体系", "Wiki", "review"],
+    "theme_status": "existing"
+  },
+  {
+    "text": "除此之外,这个ISO的标准也要写好。",
+    "theme": "ISOOR标准",
+    "tags": ["ISO"],
+    "theme_status": "proposed"
+  },
+  {
+    "text": "然后如果还有时间的话,就再弄一下passive portfolio,看看要不要再买进一些。虽然确实还不太清楚有什么明确的策略,但是从过往的业绩来看,我似乎买的东西不相关性挺高的。所以如果可以让这个passive portfolio manager这个project,可以加一个相关性的研究,确定一下,我觉得按照目前的情况去买入,应该也还是可以接受。",
+    "theme": "被动交易",
+    "tags": ["资产配置", "相关性研究", "passive portfolio manager"],
+    "theme_status": "existing"
+  }
+]

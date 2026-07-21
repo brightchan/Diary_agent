@@ -1,0 +1,20 @@
+[
+  {
+    "target_entry_id": "96e88dc9-8665-4282-a2b6-a9a4cdee48ae",
+    "relation": "action_followup",
+    "reason": "延续了为新学生明确指导与交接安排的未完成准备。",
+    "score": 0.93
+  },
+  {
+    "target_entry_id": "13df22a6-05bc-4e6b-a0b1-434890e69248",
+    "relation": "action_followup",
+    "reason": "延续了建立个人知识体系并收敛到可落地版本的计划。",
+    "score": 0.95
+  },
+  {
+    "target_entry_id": "8d45a244-0478-4174-87f8-e0f47cbcfed9",
+    "relation": "action_followup",
+    "reason": "延续了先梳理不同资产关系与组合结果、再决定交易的方向。",
+    "score": 0.96
+  }
+]

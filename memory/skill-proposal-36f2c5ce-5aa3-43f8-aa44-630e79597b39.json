@@ -1,0 +1,18 @@
+{
+  "feedback_ids": [
+    "9eb18cd0-66f8-42e4-8a8e-bbeddef925e4",
+    "c25bf2dd-f7ae-4e1c-9152-89c32e918569"
+  ],
+  "problem_summary": "The two newly queued feedback items are corrections to the user's existing goal data and hierarchy, not requests for a new Skill capability. The active Skill, protocol, CLI, and tests already define long_term goals, the life -> long_term -> short_term -> weekly order, and optional parent relationships. The current weekly automation nevertheless instructs the agent to create a Skill-revision proposal whenever feedback exists, which can turn a data correction into a redundant code proposal and leave the actual goal change unprepared.",
+  "impact": "Without explicit triage, weekly feedback processing may repeatedly surface already-supported goal-scope and parent-child corrections without producing the reviewable goal-change preview needed to update the user's current goals. It also risks consuming a governed Skill revision for no behaviour change.",
+  "proposed_diff": "1. Update SKILL.md's 'Feedback and weekly skill improvement' section to triage each new feedback item before creating a Skill revision. When feedback asks to correct an existing goal's scope, deadline, parent, title, or status and the active CLI already supports that change, prepare a goal-change-preview instead of a Skill-revision proposal; never apply it without the user's explicit per-item approval.\n2. Keep Skill-revision proposals for feedback that identifies a missing capability, a contradicted workflow rule, a safety boundary gap, or a defect that requires code, Skill, or documentation changes. If feedback mixes goal data changes and a workflow defect, produce the goal-change preview separately and limit the Skill proposal to the defect.\n3. Update references/skill-improvement.md with the same triage rule, including an example that maps 'move a three-year goal to long_term and place a short-term child beneath it' to goal-change-preview rather than a code diff.\n4. After approval, update the persisted Diary Agent weekly skill-improvement automation prompt to follow the same routing rule, preserving its existing preview/approval and publish requirements.\n5. Do not change the active goal model or migrate confirmed journals: the current implementation already supports the requested hierarchy.",
+  "compatibility": "This preserves the existing explicit approval boundaries: goal data changes remain previewed and require per-item approval; active Skill changes still require a separate reviewed proposal and explicit implementation approval. Existing feedback that genuinely requests a capability continues through propose-skill-revision. No existing goal, journal, SQLite schema, or confirmed text is rewritten.",
+  "tests": [
+    "Run skill-creator quick_validate.py on .agents/skills/record-life-journal",
+    "Run /mnt/d/Project_PA/condaenv_host/bin/python -m pytest",
+    "Run git diff --check",
+    "Manual routing check: a long_term scope/deadline/parent correction produces a goal-change preview and no Skill revision; a genuine missing workflow capability still produces a Skill revision",
+    "Manual safety check: neither route applies changes before explicit user approval"
+  ],
+  "token_cost_change": "neutral with reason: triage uses the existing feedback kind, bounded goal context, and proposal commands; it avoids redundant Skill-proposal drafting for data-only corrections."
+}
