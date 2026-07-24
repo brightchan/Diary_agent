@@ -37,6 +37,8 @@ Theme changes never rewrite verbatim originals or confirmed cleaned Markdown. `r
 
 `weekly-context` returns current-period `entries` for compatibility plus separate `diary_entries` and `thought_entries`, each entry's optional `agent_feedback` as a separate non-authoritative field, Active goals with separate `weekly_evidence` and non-authoritative `weekly_interpretations`, timeline-aware `pending_decisions` plus `decision_review` suggestions, and a bounded `historical_connections` set of older segments with dates, IDs, scores, and evidence reasons. It excludes the current weekly period and returns `reflection_prompt_candidate: null` when evidence is insufficient. Agent feedback and weekly interpretation records never mutate user text, goal state, or decision facts.
 
+`create-draft --analysis-mode auto` keeps ordinary diary/thought context empty and returns compact `theme_candidates`; explicit decisions, strong continuity/goal signals, or `deep` may return bounded context. `capture-context` retrieves one requested profile for an existing draft without creating another entry. Legacy `context` and `goal_context` response keys remain present.
+
 Goal mirror:
 
 - `memory/goals.md`: regenerated from SQLite only after confirmed goal changes; current hierarchy plus recent confirmed events.

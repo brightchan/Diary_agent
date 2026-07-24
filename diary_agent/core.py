@@ -35,6 +35,9 @@ DECISION_STATUSES = ("pending", "made")
 ORDINARY_ENTRY_TYPES = ("diary", "thought")
 USER_ENTRY_TYPES = (*ORDINARY_ENTRY_TYPES, "decision")
 SEARCH_ENTRY_TYPES = ("diary", "thought", "decision", "weekly")
+CAPTURE_ANALYSIS_MODES = ("auto", "deep", "none")
+CAPTURE_CONTEXT_PROFILES = ("continuity", "thought", "decision", "goals", "deep")
+GOAL_SIGNAL_RE = re.compile(r"(?:目标|进展|推进|阻碍|卡住|完成(?:了)?.{0,12}(?:计划|训练|任务))")
 DECISION_STRUCTURE = (
     "objective",
     "options",
@@ -546,10 +549,19 @@ class DiaryStore:
         db.execute("PRAGMA foreign_keys=ON")
         return db
 
-    def create_draft(self, raw_text: str, entry_type: str = "diary", source: str = "codex", entry_date: str | None = None) -> dict[str, Any]:
+    def create_draft(
+        self,
+        raw_text: str,
+        entry_type: str = "diary",
+        source: str = "codex",
+        entry_date: str | None = None,
+        analysis_mode: str = "auto",
+    ) -> dict[str, Any]:
         self.initialize()
         if entry_type not in {"diary", "weekly", "thought", "decision"}:
             raise ValueError("entry_type must be diary, weekly, thought, or decision")
+        if analysis_mode not in CAPTURE_ANALYSIS_MODES:
+            raise ValueError("analysis_mode must be auto, deep, or none")
         text = raw_text.strip()
         if not text:
             raise ValueError("raw_text must not be empty")
@@ -561,26 +573,79 @@ class DiaryStore:
                 "INSERT INTO entries(id,entry_type,status,raw_text,entry_date,source,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
                 (entry_id, entry_type, "draft", text, date_text, source, now, now),
             )
+            base_routing = self.route(text, analysis_mode=analysis_mode)
+            context: list[dict[str, Any]] = []
+            goal_context: dict[str, Any] = {"has_context": False, "query": text, "goals": []}
+            loaded_profiles: list[str] = []
+            if analysis_mode == "deep":
+                context = self._retrieve_context_impl(db, text, serialized_char_budget=5600)
+                goal_context = self._conversation_context_impl(db, text, token_budget=500)
+                loaded_profiles.append("deep")
+            elif analysis_mode == "auto" and entry_type == "decision":
+                context = self._retrieve_context_impl(
+                    db,
+                    text,
+                    serialized_char_budget=4800,
+                    entry_types=("decision", "thought"),
+                )
+                loaded_profiles.append("decision")
+            elif analysis_mode == "auto" and base_routing["signals"]["continuation_language"]:
+                context = self._retrieve_context_impl(
+                    db,
+                    text,
+                    serialized_char_budget=2200,
+                    include_details=False,
+                )
+                loaded_profiles.append("continuity")
+            if analysis_mode == "auto" and GOAL_SIGNAL_RE.search(text):
+                candidate_goals = self._conversation_context_impl(db, text, token_budget=350)
+                strong_goals = [
+                    goal
+                    for goal in candidate_goals["goals"]
+                    if float(goal.get("relevance_score", 0)) >= 0.2
+                    or _normalize(str(goal.get("title", ""))) in _normalize(text)
+                ]
+                if strong_goals:
+                    goal_context = {"has_context": True, "query": text, "goals": strong_goals}
+                    loaded_profiles.append("goals")
+            routing = self.route(
+                text,
+                relevant_goal_count=len(goal_context["goals"]),
+                analysis_mode=analysis_mode,
+                continuity_loaded="continuity" in loaded_profiles or "deep" in loaded_profiles,
+            )
+            theme_candidates = self._theme_candidates(db, text, serialized_char_budget=700)
+            cleaning_style = self._latest_cleaning_style(db)
+            context_chars = len(_json(context)) + len(_json(goal_context))
+            db.execute(
+                "INSERT INTO agent_runs(id,entry_id,routing_json,context_chars,output_chars,created_at) VALUES(?,?,?,?,?,?)",
+                (str(uuid.uuid4()), entry_id, _json(routing), context_chars, 0, _iso()),
+            )
             db.commit()
         original_path = self._journal_path("original", date_text, entry_id)
         self._write_original(original_path, entry_id, date_text, entry_type, "draft", text)
         draft_file = self.paths.drafts / f"{entry_id}.json"
         draft_file.write_text(_json({"entry_id": entry_id, "status": "draft", "created_at": now}), encoding="utf-8")
-        context = self.retrieve_context(text)
-        goal_context = self.conversation_context(text, token_budget=500)
-        routing = self.route(text, relevant_goal_count=len(goal_context["goals"]))
-        self.log_agent_run(entry_id, routing, sum(len(item["text"]) for item in context), 0)
         return {
             "entry_id": entry_id,
             "entry_date": date_text,
             "entry_type": entry_type,
+            "analysis_mode": analysis_mode,
+            "context_state": {"loaded_profiles": loaded_profiles, "deep_available": True},
             "routing_decision": routing,
             "context": context,
             "goal_context": goal_context,
-            "cleaning_style": self.current_cleaning_style(),
+            "theme_candidates": theme_candidates,
+            "cleaning_style": cleaning_style,
         }
 
-    def route(self, text: str, relevant_goal_count: int = 0) -> dict[str, Any]:
+    def route(
+        self,
+        text: str,
+        relevant_goal_count: int = 0,
+        analysis_mode: str = "auto",
+        continuity_loaded: bool = False,
+    ) -> dict[str, Any]:
         filler_count = len(FILLER_RE.findall(text))
         punctuation = sum(text.count(mark) for mark in "，。！？；,.!?;")
         speech_like = filler_count >= 1 or (len(text) > 120 and punctuation <= 1)
@@ -592,14 +657,15 @@ class DiaryStore:
                 "entry_type_classification": True,
                 "clean": True,
                 "classify": True,
-                "continuity": True,
-                "goal_interpretation": True,
+                "continuity": analysis_mode == "deep" or continuity_loaded,
+                "goal_interpretation": relevant_goal_count > 0,
             },
             "delegate": {
                 "cleaner": speech_like or uncertain,
                 "classifier": multi_topic,
                 "continuity": continuity,
                 "goal_interpreter": relevant_goal_count > 0,
+                "fast_worker": speech_like or uncertain or multi_topic,
             },
             "signals": {
                 "filler_count": filler_count,
@@ -611,8 +677,9 @@ class DiaryStore:
                 "cleaning_mode": "minimal" if speech_like or uncertain else "preserve_verbatim",
             },
             "model_preference": {
-                "cleaner": "lightweight_if_supported",
-                "classifier": "lightweight_if_supported",
+                "fast_worker": "gpt-5.6-terra:low",
+                "cleaner": "gpt-5.6-terra:low",
+                "classifier": "gpt-5.6-terra:low",
                 "continuity": "capable",
                 "goal_interpreter": "capable",
                 "orchestrator": "capable",
@@ -964,61 +1031,114 @@ class DiaryStore:
             "updated_at": now,
         }
 
-    def retrieve_context(
+    def _theme_candidates(
         self,
+        db: sqlite3.Connection,
         query: str,
-        token_budget: int = 1800,
-        entry_type: str | None = None,
+        serialized_char_budget: int = 700,
     ) -> list[dict[str, Any]]:
-        """Return a relevance-driven context set with no fixed item-count cap."""
-        self.initialize()
-        if entry_type is not None:
-            entry_type = str(entry_type).strip().lower()
-            if entry_type not in SEARCH_ENTRY_TYPES:
-                raise ValueError("search entry_type must be diary, thought, decision, or weekly")
-        char_budget = max(600, token_budget * 2)
+        query_text = _normalize(query)
+        query_vec = _ngrams(query)
+        rows = db.execute(
+            """SELECT t.id,t.name,t.aliases_json,t.description,COUNT(DISTINCT st.segment_id) AS usage_count
+               FROM themes t LEFT JOIN segment_tags st ON st.theme_id=t.id
+               WHERE t.status='active'
+               GROUP BY t.id ORDER BY usage_count DESC,t.name"""
+        ).fetchall()
+        scored: list[tuple[float, sqlite3.Row, list[str]]] = []
+        for row in rows:
+            aliases = [str(item) for item in json.loads(row["aliases_json"] or "[]") if str(item).strip()]
+            names = [str(row["name"]), *aliases]
+            exact = any(_normalize(name) and _normalize(name) in query_text for name in names)
+            searchable = " ".join([*names, str(row["description"] or "")])
+            semantic = _cosine(query_vec, _ngrams(searchable))
+            score = max(0.95 if exact else 0.0, semantic)
+            if score >= 0.08:
+                scored.append((score, row, aliases))
+        scored.sort(key=lambda item: (item[0], int(item[1]["usage_count"])), reverse=True)
+        selected: list[dict[str, Any]] = []
+        for score, row, aliases in scored:
+            item = {
+                "theme_id": str(row["id"]),
+                "name": str(row["name"]),
+                "aliases": aliases,
+                "score": round(score, 4),
+                "usage_count": int(row["usage_count"]),
+            }
+            candidate = [*selected, item]
+            if selected and len(_json(candidate)) > serialized_char_budget:
+                break
+            selected.append(item)
+            if len(_json(selected)) >= serialized_char_budget:
+                break
+        return selected
+
+    def _retrieve_context_impl(
+        self,
+        db: sqlite3.Connection,
+        query: str,
+        serialized_char_budget: int,
+        entry_types: tuple[str, ...] | None = None,
+        include_details: bool = True,
+    ) -> list[dict[str, Any]]:
         query_vec = _ngrams(query)
         terms = [term for term in re.findall(r"[\w\u4e00-\u9fff]{2,}", query) if len(term) >= 2]
         candidates: dict[str, dict[str, Any]] = {}
-        with self.connect() as db:
-            rows: Iterable[sqlite3.Row]
-            if terms:
-                fts_query = " OR ".join(f'"{term.replace(chr(34), "")}"' for term in terms[:12])
-                try:
-                    type_clause = " AND e.entry_type=?" if entry_type else ""
-                    parameters: list[Any] = [fts_query]
-                    if entry_type:
-                        parameters.append(entry_type)
-                    rows = db.execute(
-                        f"SELECT e.*, bm25(entries_fts) AS rank FROM entries_fts JOIN entries e ON e.id=entries_fts.entry_id WHERE entries_fts MATCH ? AND e.status='confirmed'{type_clause} ORDER BY rank",
-                        parameters,
-                    ).fetchall()
-                except sqlite3.OperationalError:
-                    rows = []
-            else:
+        decision_columns = (
+            "d.objective AS decision_objective,d.options_json AS decision_options,"
+            "d.opportunity_cost_json AS decision_opportunity_cost,d.likely_regret_json AS decision_likely_regret,"
+            "d.assumptions_json AS decision_assumptions,d.smallest_experiment_json AS decision_experiment,"
+            "d.recommendation_json AS decision_recommendation"
+        )
+        type_clause = ""
+        type_parameters: list[Any] = []
+        if entry_types:
+            placeholders = ",".join("?" for _ in entry_types)
+            type_clause = f" AND e.entry_type IN ({placeholders})"
+            type_parameters.extend(entry_types)
+        if terms:
+            fts_query = " OR ".join(f'"{term.replace(chr(34), "")}"' for term in terms[:12])
+            try:
+                rows = db.execute(
+                    f"""SELECT e.id,e.entry_type,e.entry_date,e.clean_text,e.raw_text,e.confirmed_at,
+                               {decision_columns},bm25(entries_fts) AS rank
+                        FROM entries_fts JOIN entries e ON e.id=entries_fts.entry_id
+                        LEFT JOIN decisions d ON d.entry_id=e.id
+                        WHERE entries_fts MATCH ? AND e.status='confirmed'{type_clause} ORDER BY rank""",
+                    [fts_query, *type_parameters],
+                ).fetchall()
+            except sqlite3.OperationalError:
                 rows = []
             for row in rows:
-                candidates[row["id"]] = {**dict(row), "_fts_match": True}
-            recent_sql = "SELECT * FROM entries WHERE status='confirmed'"
-            recent_parameters: list[Any] = []
-            if entry_type:
-                recent_sql += " AND entry_type=?"
-                recent_parameters.append(entry_type)
-            recent_sql += " ORDER BY entry_date DESC, confirmed_at DESC"
-            recent = db.execute(recent_sql, recent_parameters).fetchall()
-            for row in recent:
-                candidates.setdefault(row["id"], dict(row))
-            for candidate in candidates.values():
-                candidate["segments"] = self._entry_segment_records(db, str(candidate["id"]))
-                candidate["decision"] = self._decision_record(db, str(candidate["id"]))
-                candidate["agent_feedback"] = self._entry_agent_feedback(db, str(candidate["id"]))
+                candidates[str(row["id"])] = {**dict(row), "_fts_match": True}
+        recent = db.execute(
+            f"""SELECT e.id,e.entry_type,e.entry_date,e.clean_text,e.raw_text,e.confirmed_at,
+                       {decision_columns}
+                FROM entries e LEFT JOIN decisions d ON d.entry_id=e.id
+                WHERE e.status='confirmed'{type_clause}
+                ORDER BY e.entry_date DESC,e.confirmed_at DESC""",
+            type_parameters,
+        ).fetchall()
+        for row in recent:
+            candidates.setdefault(str(row["id"]), dict(row))
 
-        scored = []
+        scored: list[tuple[float, dict[str, Any], str]] = []
         for row in candidates.values():
-            text = row.get("clean_text") or row.get("raw_text") or ""
-            searchable_text = f"{text} {self._decision_search_text(row['decision'])}" if row.get("decision") else text
-            semantic = _cosine(query_vec, _ngrams(searchable_text))
-            days = max(0, (_now().date() - datetime.fromisoformat(row["entry_date"]).date()).days)
+            text = str(row.get("clean_text") or row.get("raw_text") or "")
+            decision_text = " ".join(
+                str(row.get(key) or "")
+                for key in (
+                    "decision_objective",
+                    "decision_options",
+                    "decision_opportunity_cost",
+                    "decision_likely_regret",
+                    "decision_assumptions",
+                    "decision_experiment",
+                    "decision_recommendation",
+                )
+            )
+            semantic = _cosine(query_vec, _ngrams(f"{text} {decision_text}"))
+            days = max(0, (_now().date() - datetime.fromisoformat(str(row["entry_date"])).date()).days)
             recency = 1 / (1 + days / 30)
             score = semantic * 0.82 + recency * 0.18
             if row.get("_fts_match"):
@@ -1028,38 +1148,108 @@ class DiaryStore:
         scored.sort(key=lambda item: item[0], reverse=True)
 
         selected: list[dict[str, Any]] = []
-        used = 0
         covered: set[str] = set()
         previous_score = 1.0
+        budget = max(600, int(serialized_char_budget))
         for score, row, text in scored:
             novelty_terms = set(re.findall(r"[\w\u4e00-\u9fff]{2,}", text)) - covered
             marginal = score * (1.0 if novelty_terms else 0.35)
             if selected and marginal < 0.08 and score < previous_score * 0.55:
                 break
-            snippet = text[:1200]
-            if used + len(snippet) > char_budget:
-                remaining = char_budget - used
-                if remaining < 160:
+            item: dict[str, Any] = {
+                "entry_id": str(row["id"]),
+                "date": str(row["entry_date"]),
+                "type": str(row["entry_type"]),
+                "score": round(score, 4),
+                "text": text[:1200],
+            }
+            if include_details:
+                item.update(
+                    segments=self._entry_segment_records(db, str(row["id"])),
+                    decision=self._decision_record(db, str(row["id"])),
+                    agent_feedback=self._entry_agent_feedback(db, str(row["id"])),
+                )
+            candidate_size = len(_json([*selected, item]))
+            if candidate_size > budget:
+                overflow = candidate_size - budget
+                keep = max(0, len(item["text"]) - overflow - 8)
+                item["text"] = item["text"][:keep]
+                candidate_size = len(_json([*selected, item]))
+            if candidate_size > budget:
+                if selected:
                     break
-                snippet = snippet[:remaining]
-            selected.append(
-                {
-                    "entry_id": row["id"],
-                    "date": row["entry_date"],
-                    "type": row["entry_type"],
-                    "score": round(score, 4),
-                    "text": snippet,
-                    "segments": row.get("segments", []),
-                    "decision": row.get("decision"),
-                    "agent_feedback": row.get("agent_feedback"),
-                }
-            )
-            used += len(snippet)
+                if include_details:
+                    for optional_field in ("agent_feedback", "segments", "decision"):
+                        item.pop(optional_field, None)
+                        candidate_size = len(_json([item]))
+                        if candidate_size <= budget:
+                            break
+            if candidate_size > budget:
+                break
+            selected.append(item)
             covered.update(novelty_terms)
             previous_score = score
-            if used >= char_budget:
+            if candidate_size >= budget:
                 break
         return selected
+
+    def retrieve_context(
+        self,
+        query: str,
+        token_budget: int = 1800,
+        entry_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return a relevance-driven context set bounded by serialized size."""
+        self.initialize()
+        normalized_type = str(entry_type).strip().lower() if entry_type is not None else None
+        if normalized_type is not None and normalized_type not in SEARCH_ENTRY_TYPES:
+            raise ValueError("search entry_type must be diary, thought, decision, or weekly")
+        with self.connect() as db:
+            return self._retrieve_context_impl(
+                db,
+                query,
+                serialized_char_budget=max(1200, token_budget * 2),
+                entry_types=(normalized_type,) if normalized_type else None,
+            )
+
+    def capture_context(self, entry_id: str, profile: str) -> dict[str, Any]:
+        self.initialize()
+        if profile not in CAPTURE_CONTEXT_PROFILES:
+            raise ValueError("capture context profile must be continuity, thought, decision, goals, or deep")
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT id,raw_text,status FROM entries WHERE id=?",
+                (entry_id,),
+            ).fetchone()
+            if not row or row["status"] == "cancelled":
+                raise KeyError(entry_id)
+            text = str(row["raw_text"])
+            context: list[dict[str, Any]] = []
+            goal_context: dict[str, Any] = {"has_context": False, "query": text, "goals": []}
+            if profile == "continuity":
+                context = self._retrieve_context_impl(db, text, 2600, include_details=False)
+            elif profile == "thought":
+                context = self._retrieve_context_impl(db, text, 4000, entry_types=("thought",))
+            elif profile == "decision":
+                context = self._retrieve_context_impl(
+                    db,
+                    text,
+                    5200,
+                    entry_types=("decision", "thought"),
+                )
+            elif profile == "goals":
+                goal_context = self._conversation_context_impl(db, text, token_budget=500)
+            elif profile == "deep":
+                context = self._retrieve_context_impl(db, text, 5600)
+                goal_context = self._conversation_context_impl(db, text, token_budget=500)
+        result = {
+            "entry_id": entry_id,
+            "profile": profile,
+            "context": context,
+            "goal_context": goal_context,
+        }
+        result["serialized_chars"] = len(_json(result))
+        return result
 
     def save_preview(
         self,
@@ -2080,35 +2270,41 @@ class DiaryStore:
             records = [item for item in records if _cosine(vector, _ngrams(self._goal_search_text(item))) >= 0.08 or _normalize(query) in _normalize(self._goal_search_text(item))]
         return {"has_goals": bool(records), "goals": records}
 
-    def conversation_context(self, query: str, token_budget: int = 700) -> dict[str, Any]:
-        self.initialize()
+    def _conversation_context_impl(
+        self,
+        db: sqlite3.Connection,
+        query: str,
+        token_budget: int = 700,
+    ) -> dict[str, Any]:
         text = query.strip()
         if not text:
             raise ValueError("query must not be empty")
         vector = _ngrams(text)
         scored = []
-        with self.connect() as db:
-            rows = db.execute("SELECT * FROM goals WHERE status='active' ORDER BY priority DESC,updated_at DESC").fetchall()
-            for row in rows:
-                record = self._goal_record(db, row, event_limit=3, evidence_limit=3)
-                haystack = self._goal_search_text(record)
-                score = _cosine(vector, _ngrams(haystack))
-                if _normalize(text) in _normalize(haystack) or _normalize(row["title"]) in _normalize(text):
-                    score = max(score, 0.75)
-                if score >= 0.08:
-                    scored.append((score, record))
+        rows = db.execute("SELECT * FROM goals WHERE status='active' ORDER BY priority DESC,updated_at DESC").fetchall()
+        for row in rows:
+            record = self._goal_record(db, row, event_limit=3, evidence_limit=3)
+            haystack = self._goal_search_text(record)
+            score = _cosine(vector, _ngrams(haystack))
+            if _normalize(text) in _normalize(haystack) or _normalize(row["title"]) in _normalize(text):
+                score = max(score, 0.75)
+            if score >= 0.08:
+                scored.append((score, record))
         scored.sort(key=lambda item: (item[0], item[1]["priority"]), reverse=True)
         budget = max(300, token_budget * 2)
         selected = []
-        used = 0
         for score, record in scored:
-            size = len(_json(record))
-            if selected and used + size > budget:
-                break
             record["relevance_score"] = round(score, 4)
+            candidate = [*selected, record]
+            if selected and len(_json(candidate)) > budget:
+                break
             selected.append(record)
-            used += size
         return {"has_context": bool(selected), "query": text, "goals": selected}
+
+    def conversation_context(self, query: str, token_budget: int = 700) -> dict[str, Any]:
+        self.initialize()
+        with self.connect() as db:
+            return self._conversation_context_impl(db, query, token_budget)
 
     def _normalize_agent_feedback(
         self,

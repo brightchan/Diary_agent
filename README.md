@@ -8,7 +8,7 @@ The project uses Python's standard library and Codex's reasoning. It does not re
 
 - [For users: everyday use](#for-users-everyday-use) explains what to say to Codex.
 - [Diary entries, thoughts, and decisions](#record-a-thought) explains the whole-input distinction.
-- [Agent feedback](#keep-agent-feedback-with-an-entry) explains active thought/decision feedback and passive diary feedback.
+- [Agent feedback](#keep-agent-feedback-with-an-entry) explains compact thought feedback, decision feedback, and opt-in diary feedback.
 - [Goals: life, long-term, short-term, and weekly](#goals-life-long-term-short-term-and-weekly) explains which goal types exist and how to add them.
 - [For AI agents: operating protocol](#for-ai-agents-operating-protocol) defines the safe workflow and commands.
 - [For maintainers: improving the system](#for-maintainers-improving-the-system) covers tests, backups, and Skill revisions.
@@ -52,9 +52,9 @@ The capture flow is:
 2. Codex classifies the complete input as `diary`, `thought`, or `decision`; this is one type for the whole input, not one type per segment. `weekly` is reserved for generated reviews.
 3. Codex cleans only speech artifacts, repetition, punctuation, and obvious sentence boundaries.
 4. Codex splits multiple ideas into ordered segments, gives each a primary theme, and may add cross-cutting tags.
-5. Codex may prepare a separate Agent feedback column: diary feedback is only produced when you ask; thought and decision feedback is active by default unless you skip it.
-6. When the entry is locally relevant to an Active goal, Codex may add a clearly labeled AI goal interpretation with evidence and concise feedback.
-7. Codex shows the proposed type, cleaned text, themes, Agent feedback, uncertain terms, related older entries, and at most one optional reflection question.
+5. Codex may prepare a separate Agent feedback column: diary feedback is only produced when you ask, thought feedback is compact by default, and decisions retain bounded feedback plus full analysis.
+6. Ordinary capture does not load history or goals. Strong continuity/goal signals or an explicit deep request may add bounded evidence and a labeled AI goal interpretation.
+7. Codex shows the proposed type, cleaned text, themes, uncertainties, route-specific analysis, and at most one optional reflection question.
 8. You correct the type or any interpretation, confirm, skip the question, defer it, or decline the entry.
 9. Only explicit confirmation creates the finalized cleaned journal and structured records.
 
@@ -95,7 +95,7 @@ Direct questions and requests for information remain conversation unless you exp
 Agent feedback is stored in its own field and Markdown section. It never becomes part of your verbatim original, cleaned wording, goal evidence, or decision facts.
 
 - For a `diary`, Codex does not volunteer advice. Ask `给这条日记一点反馈` to add passive feedback of at most 200 Chinese characters.
-- For a `thought`, Codex normally gives 100-200 Chinese characters of active feedback. When evidence supports it, the response includes both support and counterargument, strengths and limits, applicability boundaries, and a close connection to evidence or a confirmed prior thought.
+- For a `thought`, Codex normally gives one active feedback paragraph of at most 120 Chinese characters without loading history. Ask for deeper discussion to retrieve bounded local evidence and expand the analysis.
 - For a `decision`, Codex normally gives active feedback of at most 200 Chinese characters based primarily on related confirmed decisions and thoughts. It presents reasons for and risks against the direction and gives conditional advice without replacing the full decision analysis.
 
 After discussing a thought, you can preserve the original, specify different wording, ask Codex to synthesize both sides, or decline storage. A synthesis becomes your stored thought only after you choose it and approve the new preview. `直接入库` skips synthesis but still requires preview confirmation; `不入库` prevents confirmation. You can also say `不要 Agent 反馈` for any entry.
@@ -250,8 +250,8 @@ SQLite is the authoritative source. [`memory/goals.md`](memory/goals.md) is a re
 
 1. [`AGENTS.md`](AGENTS.md) — repository-wide working agreement.
 2. [`.agents/skills/record-life-journal/SKILL.md`](.agents/skills/record-life-journal/SKILL.md) — diary orchestration rules.
-3. [`.agents/skills/record-life-journal/references/agent-protocol.md`](.agents/skills/record-life-journal/references/agent-protocol.md) — cleaner, classifier, continuity, theme, and goal payloads.
-4. [`.agents/skills/record-life-journal/references/storage-schema.md`](.agents/skills/record-life-journal/references/storage-schema.md) — persistence and retrieval semantics.
+3. Read only the route selected by `SKILL.md`: `capture.md`, `thought.md`, `decision.md`, `weekly.md`, or `governance.md`.
+4. [`.agents/skills/record-life-journal/references/storage-schema.md`](.agents/skills/record-life-journal/references/storage-schema.md) — only for persistence, schema, or migration work.
 5. [`.agents/skills/record-life-journal/references/skill-improvement.md`](.agents/skills/record-life-journal/references/skill-improvement.md) — only when processing workflow feedback or a Skill revision.
 
 Use the project-local wrapper in agent workflows:
@@ -274,12 +274,12 @@ Create the draft before interpreting the user's wording:
 
 ```bash
 python3 .agents/skills/record-life-journal/scripts/journal.py --root . \
-  create-draft --text '<verbatim user input>'
+  create-draft --analysis-mode auto --text '<verbatim user input>'
 ```
 
-Use the returned `entry_id` throughout the turn. Use its routing decision, journal context, and bounded `goal_context` instead of scanning the entire journal tree or all goals. When `goal_context.has_context` is false, skip goal interpretation.
+Use the returned `entry_id` throughout the turn. Ordinary `auto` capture returns empty `context` and `goal_context`, compact `theme_candidates`, and no subagent route. Strong continuity/goal signals and explicit decisions may load bounded context. Use `--analysis-mode deep` only when requested; use `capture-context` to fetch one missing profile without creating another draft.
 
-Whole-input `diary`/`thought`/`decision` classification, cleaning, theme classification, and continuity checks are always required. The initial draft type is not authoritative. Classify the complete input once, show the selected type in the preview, and never assign different entry types to its segments. The deterministic cleaner is only a starting candidate:
+Whole-input `diary`/`thought`/`decision` classification, conservative cleaning, and theme classification are always required. Continuity and goal analysis are conditional. The initial draft type is not authoritative. Classify the complete input once, show the selected type in the preview, and never assign different entry types to its segments. The deterministic cleaner is only a starting candidate:
 
 ```bash
 python3 .agents/skills/record-life-journal/scripts/journal.py --root . \
@@ -410,7 +410,8 @@ Exit when `has_feedback` is false. Otherwise follow `skill-improvement.md`; do n
 | Command | Purpose |
 | --- | --- |
 | `init` | Create directories, schema, migrations, and missing memory files |
-| `create-draft` | Store verbatim text and return routing, journal context, and locally relevant Active goals |
+| `create-draft` | Store verbatim text and return fast routing, compact theme candidates, and only context permitted by `--analysis-mode` |
+| `capture-context` | Retrieve one continuity, thought, decision, goals, or deep profile for an existing draft |
 | `route` | Inspect deterministic delegation signals without creating an entry |
 | `local-clean` | Produce a conservative cleaning candidate |
 | `save-preview` | Store the whole-input diary/thought/decision type, cleaned text, segments, uncertainties, links, follow-ups, optional Agent feedback, decision analysis, and optional AI goal interpretations |

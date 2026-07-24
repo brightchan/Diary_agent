@@ -1,7 +1,7 @@
 interface:
   display_name: "生活日记与想法管家"
-  short_description: "记录日记、想法与决策，并保存独立的 Agent 反馈"
-  default_prompt: "Use $record-life-journal to capture this entry and prepare its separate Agent feedback for confirmation."
+  short_description: "快速记录日记、想法与决策，并在确认后本地保存"
+  default_prompt: "Use $record-life-journal to prepare the fastest appropriate local preview for confirmation."
 
 policy:
   allow_implicit_invocation: true

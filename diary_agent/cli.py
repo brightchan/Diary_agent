@@ -13,9 +13,15 @@ from .core import DiaryStore, TZ
 def load_json(value: str | None, fallback: Any) -> Any:
     if not value:
         return fallback
-    path = Path(value)
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+    stripped = value.lstrip()
+    if stripped.startswith(("{", "[")):
+        return json.loads(value)
+    try:
+        path = Path(value)
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        pass
     return json.loads(value)
 
 
@@ -31,6 +37,15 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--type", default="diary", choices=["diary", "weekly", "thought", "decision"])
     create.add_argument("--source", default="codex")
     create.add_argument("--date")
+    create.add_argument("--analysis-mode", default="auto", choices=["auto", "deep", "none"])
+
+    capture_context = commands.add_parser("capture-context")
+    capture_context.add_argument("--entry-id", required=True)
+    capture_context.add_argument(
+        "--profile",
+        required=True,
+        choices=["continuity", "thought", "decision", "goals", "deep"],
+    )
 
     route = commands.add_parser("route")
     route.add_argument("--text", required=True)
@@ -152,7 +167,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "init":
             result = store.initialize()
         elif args.command == "create-draft":
-            result = store.create_draft(args.text, args.type, args.source, args.date)
+            result = store.create_draft(args.text, args.type, args.source, args.date, args.analysis_mode)
+        elif args.command == "capture-context":
+            result = store.capture_context(args.entry_id, args.profile)
         elif args.command == "route":
             result = store.route(args.text)
         elif args.command == "local-clean":

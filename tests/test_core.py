@@ -5,10 +5,12 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from datetime import datetime
 from pathlib import Path
 
+from diary_agent.cli import load_json
 from diary_agent.core import DiaryStore, TZ
 
 
@@ -111,10 +113,12 @@ class DiaryStoreTests(unittest.TestCase):
                 "clean": True,
                 "classify": True,
                 "continuity": True,
-                "goal_interpretation": True,
+                "goal_interpretation": False,
             },
         )
         self.assertTrue(draft["routing_decision"]["delegate"]["cleaner"])
+        self.assertTrue(draft["routing_decision"]["delegate"]["fast_worker"])
+        self.assertEqual(draft["context_state"]["loaded_profiles"], ["continuity"])
         original = next((self.root / "journals" / "originals").rglob("*.md"))
         self.assertIn("嗯，今天", original.read_text(encoding="utf-8"))
 
@@ -134,6 +138,57 @@ class DiaryStoreTests(unittest.TestCase):
         with self.store.connect() as db:
             self.assertEqual(db.execute("SELECT count(*) FROM segments").fetchone()[0], 2)
             self.assertEqual(db.execute("SELECT count(*) FROM followups").fetchone()[0], 1)
+
+    def test_fast_capture_skips_context_and_returns_compact_theme_candidates(self):
+        self.confirm_entry("昨天做了运动。", "2026-07-20", "运动")
+        draft = self.store.create_draft("今天运动十分钟。", entry_date="2026-07-21")
+        self.assertEqual(draft["context"], [])
+        self.assertFalse(draft["goal_context"]["has_context"])
+        self.assertEqual(draft["context_state"]["loaded_profiles"], [])
+        self.assertFalse(draft["routing_decision"]["delegate"]["fast_worker"])
+        self.assertIn("运动", {item["name"] for item in draft["theme_candidates"]})
+        self.assertLessEqual(len(json.dumps(draft, ensure_ascii=False, separators=(",", ":"))), 4000)
+
+    def test_analysis_modes_and_on_demand_capture_context(self):
+        previous = self.confirm_entry("昨天继续整理日记系统。", "2026-07-20", "日记系统")
+        automatic = self.store.create_draft("今天继续整理日记系统。", entry_date="2026-07-21")
+        self.assertEqual(automatic["context_state"]["loaded_profiles"], ["continuity"])
+        self.assertTrue(any(item["entry_id"] == previous for item in automatic["context"]))
+
+        none = self.store.create_draft(
+            "明天继续整理日记系统。",
+            entry_date="2026-07-21",
+            analysis_mode="none",
+        )
+        self.assertEqual(none["context"], [])
+        self.assertEqual(none["context_state"]["loaded_profiles"], [])
+
+        deep = self.store.create_draft(
+            "整理日记系统。",
+            entry_date="2026-07-21",
+            analysis_mode="deep",
+        )
+        self.assertEqual(deep["context_state"]["loaded_profiles"], ["deep"])
+        self.assertTrue(deep["context"])
+
+        on_demand = self.store.capture_context(none["entry_id"], "continuity")
+        self.assertEqual(on_demand["entry_id"], none["entry_id"])
+        self.assertEqual(on_demand["profile"], "continuity")
+        self.assertTrue(on_demand["context"])
+        measured = {key: value for key, value in on_demand.items() if key != "serialized_chars"}
+        self.assertEqual(on_demand["serialized_chars"], len(json.dumps(measured, ensure_ascii=False, separators=(",", ":"))))
+
+        decision = self.store.create_draft("我需要决定是否更换工作。", entry_type="decision")
+        self.assertEqual(decision["context_state"]["loaded_profiles"], ["decision"])
+        with self.assertRaisesRegex(ValueError, "capture context profile"):
+            self.store.capture_context(decision["entry_id"], "unknown")
+
+        self.confirm_entry("序列化预算测试词" + "很长的正文" * 600, "2026-07-19", "预算")
+        bounded = self.store.retrieve_context("序列化预算测试词", token_budget=1)
+        self.assertLessEqual(
+            len(json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))),
+            1200,
+        )
 
     def test_whole_input_thought_type_preview_search_weekly_and_markdown(self):
         text = "细胞命运可能更适合被理解为吸引子状态，而不是固定分类。这个模型还需要寻找反例。"
@@ -898,11 +953,32 @@ class DiaryStoreTests(unittest.TestCase):
 
         project = Path(__file__).parents[1]
         skill = (project / ".agents" / "skills" / "record-life-journal" / "SKILL.md").read_text(encoding="utf-8")
-        protocol = (project / ".agents" / "skills" / "record-life-journal" / "references" / "agent-protocol.md").read_text(encoding="utf-8")
-        self.assertIn("For `diary`, do not volunteer Agent feedback by default", skill)
-        self.assertIn("For `thought`, actively respond with 100-200 Chinese characters", skill)
-        self.assertIn("For `decision`, actively generate up to 200 Chinese characters", skill)
-        self.assertIn("Never merge `agent_feedback` into `clean_text`", protocol)
+        references = project / ".agents" / "skills" / "record-life-journal" / "references"
+        capture = (references / "capture.md").read_text(encoding="utf-8")
+        thought = (references / "thought.md").read_text(encoding="utf-8")
+        decision = (references / "decision.md").read_text(encoding="utf-8")
+        self.assertLessEqual(len(skill.encode("utf-8")), 8000)
+        self.assertIn("For diary, omit Agent feedback unless explicitly requested", capture)
+        self.assertIn("at most 120 Chinese characters", thought)
+        self.assertIn("Agent feedback may be at most 200 Chinese characters", decision)
+
+    def test_load_json_parses_long_inline_payload_before_path_lookup(self):
+        payload = [{"text": "很长的口语片段" * 80, "theme": "系统"}]
+        encoded = json.dumps(payload, ensure_ascii=False)
+        self.assertGreater(len(encoded), 255)
+        self.assertEqual(load_json(encoded, []), payload)
+
+    def test_fast_worker_uses_terra_low_without_loading_diary_skill(self):
+        project = Path(__file__).parents[1]
+        agent = tomllib.loads(
+            (project / ".codex" / "agents" / "diary-fast.toml").read_text(encoding="utf-8")
+        )
+        self.assertEqual(agent["model"], "gpt-5.6-terra")
+        self.assertEqual(agent["model_reasoning_effort"], "low")
+        self.assertEqual(agent["sandbox_mode"], "read-only")
+        self.assertFalse(agent["skills"]["config"][0]["enabled"])
+        self.assertIn('"theme":"string"', agent["developer_instructions"])
+        self.assertIn("Uncertainties must be objects", agent["developer_instructions"])
 
     def test_agent_feedback_cli_preview(self):
         text = "通过 CLI 保存一条带独立反馈的想法。"
@@ -965,7 +1041,7 @@ class DiaryStoreTests(unittest.TestCase):
         agreement = (project / "AGENTS.md").read_text(encoding="utf-8")
         skill = (project / ".agents" / "skills" / "record-life-journal" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("unqualified declarative message", agreement)
-        self.assertIn("Default personal-life capture", skill)
+        self.assertIn("Treat an unqualified statement", skill)
         package_text = "\n".join(path.read_text(encoding="utf-8") for path in (project / "diary_agent").glob("*.py"))
         for forbidden in ("OPENAI_API_KEY", "import openai", "embedding", "vector database"):
             self.assertNotIn(forbidden, package_text)
