@@ -80,3 +80,8 @@
 - ID: `a5533aba-c804-4c33-accb-d0db291fd6aa`
 - 扩充尚未批准的 thought 对话提案：为 diary、thought、decision 都增加独立且可持久化的 Agent 反馈栏目，与用户原文和 clean_text 分开。diary 的 Agent 反馈被动触发；thought 和 decision 默认主动生成分析。decision 的短反馈主要结合过去相关的 confirmed decisions 和 thoughts 给出建议，尽量同时呈现支持理由和反方/风险，并控制在 200 字内。
 
+## 2026-07-24T09:50:12+08:00 [performance]
+
+- ID: `82bad01e-e530-4492-934b-19fd4c750e65`
+- 记日记 Skill 每次使用过慢。用户要求最大速度默认：普通 diary/thought 不加载历史正文或目标解释，thought 仅短评；weekly、decision、明确深入请求或强信号才加载深上下文。将主 SKILL.md 压缩并按步骤拆分 references，修复 create-draft 过大 JSON、重复初始化、检索先全量补查和长 JSON Errno 36；复杂清理/分类使用只读 gpt-5.6-terra low 单 worker。
+
